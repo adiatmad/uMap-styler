@@ -118,6 +118,11 @@ def process_road_data(text, road_bg, road_border):
         kondisi = kondisi_match.group(1).strip() if kondisi_match else "tidak diketahui"
         keterangan = keterangan_match.group(1).strip() if keterangan_match else "jalan evakuasi"
         
+        # Clean up nama - take first part if multiple colons
+        nama_parts = re.split(r'\s*:\s*', nama)
+        if len(nama_parts) > 1:
+            nama = nama_parts[0]
+        
         # Check for missing critical fields
         warnings = []
         if not nama_match:
@@ -125,32 +130,36 @@ def process_road_data(text, road_bg, road_border):
         if not jenis_match:
             warnings.append("jenis jalan")
         
-        html_template = f'''<div style="font-family: Arial, sans-serif; background: {road_bg}; border: 2px solid {road_border}; border-radius: 8px; padding: 12px;">
-<div style="display: grid; gap: 8px;">
-<div style="display: flex; align-items: start;">
-<div style="min-width: 120px; font-weight: bold; color: #2c3e50;">Nama Jalan:</div>
-<div>{nama}</div>
+        html_template = f'''<div style="font-family: Arial, sans-serif; background: {road_bg}; border: 2px solid {road_border}; border-radius: 8px; padding: 16px; max-width: 600px;">
+<table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+<tr style="border-bottom: 2px solid {road_border};">
+<td colspan="2" style="padding: 8px 0; font-size: 16px; font-weight: bold; color: #2c3e50;">🛣️ {nama}</td>
+</tr>
+<tr>
+<td style="padding: 8px 0; width: 140px; font-weight: bold; color: #2c3e50; vertical-align: top;">Jenis Jalan:</td>
+<td style="padding: 8px 0; color: #34495e;">{jenis}</td>
+</tr>
+<tr>
+<td style="padding: 8px 0; font-weight: bold; color: #2c3e50; vertical-align: top;">Lebar Jalan:</td>
+<td style="padding: 8px 0; color: #34495e;">{lebar}</td>
+</tr>
+<tr>
+<td style="padding: 8px 0; font-weight: bold; color: #2c3e50; vertical-align: top;">Karakter Jalan:</td>
+<td style="padding: 8px 0; color: #34495e;">{karakter}</td>
+</tr>
+<tr>
+<td style="padding: 8px 0; font-weight: bold; color: #2c3e50; vertical-align: top;">Kondisi Jalan:</td>
+<td style="padding: 8px 0; color: #34495e;">✅ {kondisi}</td>
+</tr>
+<tr>
+<td colspan="2" style="padding-top: 12px;">
+<div style="background: #d4edda; padding: 10px; border-radius: 5px; border-left: 4px solid #28a745;">
+<strong style="color: #155724;">ℹ️ Keterangan:</strong><br>
+<span style="color: #155724;">{keterangan}</span>
 </div>
-<div style="display: flex; align-items: start;">
-<div style="min-width: 120px; font-weight: bold; color: #2c3e50;">Jenis Jalan:</div>
-<div>{jenis}</div>
-</div>
-<div style="display: flex; align-items: start;">
-<div style="min-width: 120px; font-weight: bold; color: #2c3e50;">Lebar Jalan:</div>
-<div>{lebar}</div>
-</div>
-<div style="display: flex; align-items: start;">
-<div style="min-width: 120px; font-weight: bold; color: #2c3e50;">Karakter Jalan:</div>
-<div>{karakter}</div>
-</div>
-<div style="display: flex; align-items: start;">
-<div style="min-width: 120px; font-weight: bold; color: #2c3e50;">Kondisi Jalan:</div>
-<div>✅ {kondisi}</div>
-</div>
-<div style="background: #d4edda; padding: 8px; border-radius: 5px; margin-top: 5px;">
-<strong>Keterangan:</strong> {keterangan}
-</div>
-</div>
+</td>
+</tr>
+</table>
 </div>'''
         
         return html_template.strip(), warnings
@@ -173,6 +182,32 @@ def process_poi_data(text, poi_bg, poi_border):
         fasilitas = fasilitas_match.group(1).strip() if fasilitas_match else "tidak diketahui"
         keterangan = keterangan_match.group(1).strip() if keterangan_match else "tempat pengungsian"
         
+        # Clean up data - split on colons and extract clean values
+        # Handle cases like "Desa: Tiling tali Banjar: Banjar dinas Tiyingtali kelod"
+        nama_parts = re.split(r'\s*:\s*', nama)
+        if len(nama_parts) > 1:
+            nama = nama_parts[0]  # Take first part as main name
+        
+        # Extract additional info from Daya Tampung field
+        daya_clean = daya
+        kontak = ""
+        luas_area = ""
+        
+        # Look for contact person
+        kontak_match = re.search(r'Kontak\s+person\s*:\s*([^:]+?)(?:\s+Jenis|$)', daya, re.IGNORECASE)
+        if kontak_match:
+            kontak = kontak_match.group(1).strip()
+        
+        # Look for Luas Area
+        luas_match = re.search(r'Luas\s+Area\s+Terbuka\s*:\s*([^:]+?)(?:\s+Keterangan|$)', daya, re.IGNORECASE)
+        if luas_match:
+            luas_area = luas_match.group(1).strip()
+        
+        # Extract just the number for Daya Tampung
+        daya_number = re.search(r'([+\-]?\d+[\d\s]*(?:orang|people)?)', daya, re.IGNORECASE)
+        if daya_number:
+            daya_clean = daya_number.group(1).strip()
+        
         # Check for missing critical fields
         warnings = []
         if not nama_match:
@@ -180,28 +215,49 @@ def process_poi_data(text, poi_bg, poi_border):
         if not jenis_match:
             warnings.append("jenis fasum")
         
-        html_template = f'''<div style="font-family: Arial, sans-serif; background: {poi_bg}; border: 2px solid {poi_border}; border-radius: 8px; padding: 12px;">
-<div style="display: grid; gap: 8px;">
-<div style="display: flex; align-items: start;">
-<div style="min-width: 140px; font-weight: bold; color: #2c3e50;">Nama Fasilitas:</div>
-<div>{nama}</div>
+        html_template = f'''<div style="font-family: Arial, sans-serif; background: {poi_bg}; border: 2px solid {poi_border}; border-radius: 8px; padding: 16px; max-width: 600px;">
+<table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+<tr style="border-bottom: 2px solid {poi_border};">
+<td colspan="2" style="padding: 8px 0; font-size: 16px; font-weight: bold; color: #2c3e50;">📍 {nama}</td>
+</tr>
+<tr>
+<td style="padding: 8px 0; width: 140px; font-weight: bold; color: #2c3e50; vertical-align: top;">Jenis:</td>
+<td style="padding: 8px 0; color: #34495e;">{jenis}</td>
+</tr>
+<tr>
+<td style="padding: 8px 0; font-weight: bold; color: #2c3e50; vertical-align: top;">Daya Tampung:</td>
+<td style="padding: 8px 0; color: #34495e;">{daya_clean}</td>
+</tr>'''
+        
+        # Add optional fields if available
+        if kontak:
+            html_template += f'''
+<tr>
+<td style="padding: 8px 0; font-weight: bold; color: #2c3e50; vertical-align: top;">Kontak Person:</td>
+<td style="padding: 8px 0; color: #34495e;">{kontak}</td>
+</tr>'''
+        
+        if luas_area:
+            html_template += f'''
+<tr>
+<td style="padding: 8px 0; font-weight: bold; color: #2c3e50; vertical-align: top;">Luas Area:</td>
+<td style="padding: 8px 0; color: #34495e;">{luas_area}</td>
+</tr>'''
+        
+        html_template += f'''
+<tr>
+<td style="padding: 8px 0; font-weight: bold; color: #2c3e50; vertical-align: top;">Fasilitas:</td>
+<td style="padding: 8px 0; color: #34495e;">{fasilitas}</td>
+</tr>
+<tr>
+<td colspan="2" style="padding-top: 12px;">
+<div style="background: #fff3cd; padding: 10px; border-radius: 5px; border-left: 4px solid #ffc107;">
+<strong style="color: #856404;">ℹ️ Keterangan:</strong><br>
+<span style="color: #856404;">{keterangan}</span>
 </div>
-<div style="display: flex; align-items: start;">
-<div style="min-width: 140px; font-weight: bold; color: #2c3e50;">Jenis:</div>
-<div>{jenis}</div>
-</div>
-<div style="display: flex; align-items: start;">
-<div style="min-width: 140px; font-weight: bold; color: #2c3e50;">Daya Tampung:</div>
-<div>{daya}</div>
-</div>
-<div style="display: flex; align-items: start;">
-<div style="min-width: 140px; font-weight: bold; color: #2c3e50;">Fasilitas:</div>
-<div>{fasilitas}</div>
-</div>
-<div style="background: #fff3cd; padding: 8px; border-radius: 5px; margin-top: 5px;">
-<strong>Keterangan:</strong> {keterangan}
-</div>
-</div>
+</td>
+</tr>
+</table>
 </div>'''
         
         return html_template.strip(), warnings
