@@ -2,25 +2,26 @@ import streamlit as st
 import re
 
 # Page config
-st.set_page_config(page_title="uMap HTML Generator", page_icon="🗺️", layout="wide")
+st.set_page_config(page_title="Universal HTML Styler", page_icon="✨", layout="wide")
 
 # Initialize session state
 if 'input_data' not in st.session_state:
     st.session_state.input_data = ""
 if 'processed_results' not in st.session_state:
     st.session_state.processed_results = None
+if 'show_preview' not in st.session_state:
+    st.session_state.show_preview = False
 
 # Title
-st.title("🗺️ uMap HTML Generator")
-st.subheader("Transform your road & POI data into beautiful uMap descriptions")
+st.title("✨ Universal HTML Styler")
+st.subheader("Transform any text into beautiful styled HTML cards")
 
 # Sidebar for customization
 with st.sidebar:
     st.header("🎨 Customization")
-    road_bg_color = st.color_picker("Road Background", "#fff3cd")
-    road_border_color = st.color_picker("Road Border", "#ffeaa7")
-    poi_bg_color = st.color_picker("POI Background", "#e8f4fd")
-    poi_border_color = st.color_picker("POI Border", "#b8daff")
+    card_bg_color = st.color_picker("Card Background", "#e8f4fd")
+    card_border_color = st.color_picker("Card Border", "#b8daff")
+    info_box_color = st.color_picker("Info Box Background", "#fff3cd")
     
     st.divider()
     st.header("⚙️ Settings")
@@ -32,311 +33,219 @@ with st.expander("📋 How to use", expanded=True):
     st.markdown("""
     ### Quick Start:
     1. Click **"📝 Load Example"** to see how it works
-    2. **Paste your raw data** in the text area
-    3. **Click 'Process Data'** 
-    4. **Copy or download** the HTML output
-    5. **Paste into uMap** description fields
+    2. **Paste any text** with colon-separated fields
+    3. **Click 'Preview'** to see live preview
+    4. **Click 'Process Data'** to generate HTML
+    5. **Copy or download** the HTML output
     
-    ### Supported Formats:
-    - 🛣️ **Road descriptions** (starts with '*Deskripsi jalan*')
-    - 🏢 **POI/Facilities** (starts with 'Nama PO')
-    - 📄 **Other entries** (kept as-is)
+    ### Features:
+    - ✨ **Universal parser** - Works with any colon-separated format
+    - 📄 **Page breaks after colons** - Each field on new line
+    - 🎨 **Clean table layout** - Professional styling
+    - 📋 **Copy & Download** - Easy export
     """)
-
-# Input format guide
-with st.expander("📖 Input Format Guide"):
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        ### 🛣️ Road Format:
-        ```
-        *Deskripsi jalan* 1. nama jalan (Jalur Utara) 
-        2. Jenis jalan (aspal) 3. Lebar Jalan (4 meter) 
-        4. karakter jalan (lurus, sedikit menanjak) 
-        5. Kondisi Jalan (baik) 
-        Keterangan Tambahan: jalan evakuasi utama
-        ```
-        """)
-    
-    with col2:
-        st.markdown("""
-        ### 🏢 POI Format:
-        ```
-        Nama POI: Gedung Serbaguna Desa 
-        Jenis Fasum: (aula) 
-        Daya Tampung: 200 orang 
-        Fasilitas Pendukung (toilet, dapur umum, listrik)
-        Keterangan Tambahan: tempat pengungsian darurat
-        ```
-        """)
 
 # Example data button
 col1, col2, col3 = st.columns([1, 1, 4])
 with col1:
     if st.button("📝 Load Example", use_container_width=True):
-        st.session_state.input_data = """*Deskripsi jalan* 1. nama jalan (jalur utara) 2. Jenis jalan (aspal) 3. Lebar Jalan (4 meter) 4. karakter jalan (lurus, sedikit menanjak) 5. Kondisi Jalan (baik) Keterangan Tambahan: jalan evakuasi utama
-*Deskripsi jalan* 1. nama jalan (jalur selatan) 2. Jenis jalan (beton) 3. Lebar Jalan (3 meter) 4. karakter jalan (berkelok) 5. Kondisi Jalan (cukup baik) Keterangan Tambahan: jalur alternatif
-Nama POI: Gedung Serbaguna Desa Jenis Fasum: (aula) Daya Tampung: 200 orang Fasilitas Pendukung (toilet, dapur umum, listrik) Keterangan Tambahan: tempat pengungsian darurat
-Nama POI: Lapangan Olahraga Jenis Fasum: (lapangan terbuka) Daya Tampung: 500 orang Fasilitas Pendukung (toilet, lampu penerangan) Keterangan Tambahan: titik kumpul evakuasi"""
+        st.session_state.input_data = """SDN 1 Tiyingtali Desa: Tiling tali Banjar: Banjar dinas Tiyingtali kelod Jenis Fasum: Gedung sekolah Daya Tampung: +-600 Fasilitas Pendukung (listrik,sumber air, toilet) Kontak person: Jenis Bangunan:permanen Luas Area Terbuka: 25 are Keterangan Tambahan: di rencanakan sebagai tempat pengungsian
+Jalan Raya Utara Jenis: Aspal Lebar: 4 meter Kondisi: Baik Karakteristik: Lurus dan landai Keterangan: Jalan evakuasi utama
+Lapangan Olahraga Desa Kapasitas: 500 orang Fasilitas: Toilet, Lampu penerangan Akses: Mudah dijangkau Keterangan: Titik kumpul darurat"""
         st.rerun()
 
 with col2:
     if st.button("🗑️ Clear All", use_container_width=True):
         st.session_state.input_data = ""
         st.session_state.processed_results = None
+        st.session_state.show_preview = False
         st.rerun()
 
 # Input area
 input_data = st.text_area(
-    "📝 Paste your entire list here:",
+    "📝 Paste your text here:",
     value=st.session_state.input_data,
     height=300,
-    placeholder="Paste your data here...\n\nOr click 'Load Example' above to see how it works!",
+    placeholder="Paste any text with colon-separated fields...\n\nExample:\nNama Tempat: Gedung Serbaguna Lokasi: Desa Maju Kapasitas: 200 orang\n\nThe parser will automatically detect fields!",
     key="input_area"
 )
 
 # Update session state
 st.session_state.input_data = input_data
 
-# Processing functions
-def process_road_data(text, road_bg, road_border):
-    """Process road description data with error handling"""
+# Universal processing function
+def parse_text_to_fields(text):
+    """Parse any text and extract key-value pairs separated by colons"""
+    fields = []
+    
+    # Split by colons but preserve the structure
+    parts = re.split(r':\s*', text)
+    
+    if len(parts) < 2:
+        # No colons found, treat as single field
+        return [("Content", text.strip())]
+    
+    # First part is the title/name
+    title = parts[0].strip()
+    
+    # Process remaining parts
+    for i in range(1, len(parts)):
+        if i == len(parts) - 1:
+            # Last part - just value
+            key = "Info" if i == 1 else prev_key
+            value = parts[i].strip()
+            if value:
+                fields.append((key, value))
+        else:
+            # Split this part to get value and next key
+            # Find where the next key starts (usually after whitespace and before capital letter or keyword)
+            match = re.search(r'(.+?)\s+((?:[A-Z][a-z]*|Jenis|Nama|Daya|Fasilitas|Kontak|Luas|Keterangan|Lokasi|Kapasitas|Akses|Lebar|Kondisi|Karakteristik|Desa|Banjar)\b.*)$', parts[i])
+            
+            if match:
+                value = match.group(1).strip()
+                next_key_with_value = match.group(2).strip()
+                
+                # Extract the key from the next part
+                key_match = re.match(r'^([^:]+)', next_key_with_value)
+                if key_match:
+                    prev_key = key_match.group(1).strip()
+                else:
+                    prev_key = "Field"
+                
+                if value:
+                    fields.append((prev_key if i > 1 else "Info", value))
+                
+                # Update for next iteration
+                parts[i+1] = next_key_with_value.replace(prev_key, '', 1).strip()
+            else:
+                # Can't split, use whole thing as value
+                value = parts[i].strip()
+                if value:
+                    fields.append(("Field", value))
+    
+    return [(title, None)] + fields
+
+def create_styled_html(text, bg_color, border_color, info_color):
+    """Create styled HTML card from any text input"""
     try:
-        # More flexible regex patterns
-        nama_match = re.search(r'nama\s+jalan\s*[\(:]\s*([^)\n]+)', text, re.IGNORECASE)
-        jenis_match = re.search(r'Jenis\s+jalan\s*[\(:]\s*([^)\n]+)', text, re.IGNORECASE)
-        lebar_match = re.search(r'Lebar\s+Jalan\s*[\(:]\s*([^)\n]+)', text, re.IGNORECASE)
-        karakter_match = re.search(r'karakter\s+jalan\s*[\(:]\s*([^)\n]+)', text, re.IGNORECASE)
-        kondisi_match = re.search(r'Kondisi\s+Jalan\s*[\(:]\s*([^)\n]+)', text, re.IGNORECASE)
-        keterangan_match = re.search(r'Keterangan\s+Tambahan\s*:?\s*([^\n]+)', text, re.IGNORECASE)
+        fields = parse_text_to_fields(text)
         
-        nama = nama_match.group(1).strip() if nama_match else "jalur"
-        jenis = jenis_match.group(1).strip() if jenis_match else "tidak diketahui"
-        lebar = lebar_match.group(1).strip() if lebar_match else "tidak diketahui"
-        karakter = karakter_match.group(1).strip() if karakter_match else "tidak diketahui"
-        kondisi = kondisi_match.group(1).strip() if kondisi_match else "tidak diketahui"
-        keterangan = keterangan_match.group(1).strip() if keterangan_match else "jalan evakuasi"
+        if not fields:
+            return "<p>No data to display</p>", []
         
-        # Clean up nama - take first part if multiple colons
-        nama_parts = re.split(r'\s*:\s*', nama)
-        if len(nama_parts) > 1:
-            nama = nama_parts[0]
+        # First field is the title
+        title = fields[0][0] if fields else "Entry"
         
-        # Check for missing critical fields
-        warnings = []
-        if not nama_match:
-            warnings.append("nama jalan")
-        if not jenis_match:
-            warnings.append("jenis jalan")
-        
-        html_template = f'''<div style="font-family: Arial, sans-serif; background: {road_bg}; border: 2px solid {road_border}; border-radius: 8px; padding: 16px; max-width: 600px;">
+        html_template = f'''<div style="font-family: Arial, sans-serif; background: {bg_color}; border: 2px solid {border_color}; border-radius: 8px; padding: 16px; max-width: 600px; margin: 10px 0;">
 <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-<tr style="border-bottom: 2px solid {road_border};">
-<td colspan="2" style="padding: 8px 0; font-size: 16px; font-weight: bold; color: #2c3e50;">🛣️ {nama}</td>
-</tr>
-<tr>
-<td style="padding: 8px 0; width: 140px; font-weight: bold; color: #2c3e50; vertical-align: top;">Jenis Jalan:</td>
-<td style="padding: 8px 0; color: #34495e;">{jenis}</td>
-</tr>
-<tr>
-<td style="padding: 8px 0; font-weight: bold; color: #2c3e50; vertical-align: top;">Lebar Jalan:</td>
-<td style="padding: 8px 0; color: #34495e;">{lebar}</td>
-</tr>
-<tr>
-<td style="padding: 8px 0; font-weight: bold; color: #2c3e50; vertical-align: top;">Karakter Jalan:</td>
-<td style="padding: 8px 0; color: #34495e;">{karakter}</td>
-</tr>
-<tr>
-<td style="padding: 8px 0; font-weight: bold; color: #2c3e50; vertical-align: top;">Kondisi Jalan:</td>
-<td style="padding: 8px 0; color: #34495e;">✅ {kondisi}</td>
-</tr>
+<tr style="border-bottom: 2px solid {border_color};">
+<td colspan="2" style="padding: 8px 0; font-size: 16px; font-weight: bold; color: #2c3e50;">📌 {title}</td>
+</tr>'''
+        
+        # Add all fields
+        for i, (key, value) in enumerate(fields[1:], 1):
+            if value:
+                # Check if this is a "Keterangan" or info field
+                if re.search(r'keterangan|info|catatan|note', key, re.IGNORECASE):
+                    html_template += f'''
 <tr>
 <td colspan="2" style="padding-top: 12px;">
-<div style="background: #d4edda; padding: 10px; border-radius: 5px; border-left: 4px solid #28a745;">
-<strong style="color: #155724;">ℹ️ Keterangan:</strong><br>
-<span style="color: #155724;">{keterangan}</span>
+<div style="background: {info_color}; padding: 10px; border-radius: 5px; border-left: 4px solid #ffc107;">
+<strong style="color: #856404;">ℹ️ {key}:</strong><br>
+<span style="color: #856404;">{value}</span>
 </div>
 </td>
-</tr>
+</tr>'''
+                else:
+                    html_template += f'''
+<tr>
+<td style="padding: 8px 0; width: 140px; font-weight: bold; color: #2c3e50; vertical-align: top;">{key}:</td>
+<td style="padding: 8px 0; color: #34495e;">{value}</td>
+</tr>'''
+        
+        html_template += '''
 </table>
 </div>'''
         
-        return html_template.strip(), warnings
+        return html_template.strip(), []
     except Exception as e:
-        return f"<p style='color: red;'>Error processing road data: {str(e)}</p>", [str(e)]
+        return f"<p style='color: red;'>Error processing data: {str(e)}</p>", [str(e)]
 
-def process_poi_data(text, poi_bg, poi_border):
-    """Process POI/facility data with error handling"""
-    try:
-        # More flexible regex patterns
-        nama_match = re.search(r'Nama\s+POI?\s*:?\s*([^\n\(]+)', text, re.IGNORECASE)
-        jenis_match = re.search(r'Jenis\s+Fasum\s*:?\s*[\(:]\s*([^)\n]+)', text, re.IGNORECASE)
-        daya_match = re.search(r'Daya\s+Tampung\s*:?\s*([^\n]+)', text, re.IGNORECASE)
-        fasilitas_match = re.search(r'Fasilitas\s+Pendukung\s*[\(:]\s*([^)\n]+)', text, re.IGNORECASE)
-        keterangan_match = re.search(r'Keterangan\s+Tambahan\s*:?\s*([^\n]+)', text, re.IGNORECASE)
-        
-        nama = nama_match.group(1).strip() if nama_match else "Fasilitas"
-        jenis = jenis_match.group(1).strip() if jenis_match else "Fasilitas Umum"
-        daya = daya_match.group(1).strip() if daya_match else "tidak diketahui"
-        fasilitas = fasilitas_match.group(1).strip() if fasilitas_match else "tidak diketahui"
-        keterangan = keterangan_match.group(1).strip() if keterangan_match else "tempat pengungsian"
-        
-        # Clean up data - split on colons and extract clean values
-        # Handle cases like "Desa: Tiling tali Banjar: Banjar dinas Tiyingtali kelod"
-        nama_parts = re.split(r'\s*:\s*', nama)
-        if len(nama_parts) > 1:
-            nama = nama_parts[0]  # Take first part as main name
-        
-        # Extract additional info from Daya Tampung field
-        daya_clean = daya
-        kontak = ""
-        luas_area = ""
-        
-        # Look for contact person
-        kontak_match = re.search(r'Kontak\s+person\s*:\s*([^:]+?)(?:\s+Jenis|$)', daya, re.IGNORECASE)
-        if kontak_match:
-            kontak = kontak_match.group(1).strip()
-        
-        # Look for Luas Area
-        luas_match = re.search(r'Luas\s+Area\s+Terbuka\s*:\s*([^:]+?)(?:\s+Keterangan|$)', daya, re.IGNORECASE)
-        if luas_match:
-            luas_area = luas_match.group(1).strip()
-        
-        # Extract just the number for Daya Tampung
-        daya_number = re.search(r'([+\-]?\d+[\d\s]*(?:orang|people)?)', daya, re.IGNORECASE)
-        if daya_number:
-            daya_clean = daya_number.group(1).strip()
-        
-        # Check for missing critical fields
-        warnings = []
-        if not nama_match:
-            warnings.append("nama POI")
-        if not jenis_match:
-            warnings.append("jenis fasum")
-        
-        html_template = f'''<div style="font-family: Arial, sans-serif; background: {poi_bg}; border: 2px solid {poi_border}; border-radius: 8px; padding: 16px; max-width: 600px;">
-<table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-<tr style="border-bottom: 2px solid {poi_border};">
-<td colspan="2" style="padding: 8px 0; font-size: 16px; font-weight: bold; color: #2c3e50;">📍 {nama}</td>
-</tr>
-<tr>
-<td style="padding: 8px 0; width: 140px; font-weight: bold; color: #2c3e50; vertical-align: top;">Jenis:</td>
-<td style="padding: 8px 0; color: #34495e;">{jenis}</td>
-</tr>
-<tr>
-<td style="padding: 8px 0; font-weight: bold; color: #2c3e50; vertical-align: top;">Daya Tampung:</td>
-<td style="padding: 8px 0; color: #34495e;">{daya_clean}</td>
-</tr>'''
-        
-        # Add optional fields if available
-        if kontak:
-            html_template += f'''
-<tr>
-<td style="padding: 8px 0; font-weight: bold; color: #2c3e50; vertical-align: top;">Kontak Person:</td>
-<td style="padding: 8px 0; color: #34495e;">{kontak}</td>
-</tr>'''
-        
-        if luas_area:
-            html_template += f'''
-<tr>
-<td style="padding: 8px 0; font-weight: bold; color: #2c3e50; vertical-align: top;">Luas Area:</td>
-<td style="padding: 8px 0; color: #34495e;">{luas_area}</td>
-</tr>'''
-        
-        html_template += f'''
-<tr>
-<td style="padding: 8px 0; font-weight: bold; color: #2c3e50; vertical-align: top;">Fasilitas:</td>
-<td style="padding: 8px 0; color: #34495e;">{fasilitas}</td>
-</tr>
-<tr>
-<td colspan="2" style="padding-top: 12px;">
-<div style="background: #fff3cd; padding: 10px; border-radius: 5px; border-left: 4px solid #ffc107;">
-<strong style="color: #856404;">ℹ️ Keterangan:</strong><br>
-<span style="color: #856404;">{keterangan}</span>
-</div>
-</td>
-</tr>
-</table>
-</div>'''
-        
-        return html_template.strip(), warnings
-    except Exception as e:
-        return f"<p style='color: red;'>Error processing POI data: {str(e)}</p>", [str(e)]
+# Preview and Process buttons
+col1, col2 = st.columns(2)
 
-# Process button
-if st.button("🚀 Process Data", type="primary", use_container_width=True):
-    if not input_data.strip():
-        st.warning("⚠️ Please paste some data first, or click 'Load Example' to try it out!")
-    else:
-        with st.spinner("Processing your data..."):
-            # Process data
-            lines = input_data.strip().split('\n')
-            results = []
-            stats = {"roads": 0, "pois": 0, "other": 0, "errors": 0}
-            all_warnings = []
-            
-            # Progress bar
-            progress_bar = st.progress(0)
-            
-            for i, line in enumerate(lines):
-                if not line.strip():
-                    continue
+with col1:
+    if st.button("👁️ Preview", type="secondary", use_container_width=True):
+        if not input_data.strip():
+            st.warning("⚠️ Please paste some text first!")
+        else:
+            st.session_state.show_preview = True
+
+with col2:
+    if st.button("🚀 Process Data", type="primary", use_container_width=True):
+        if not input_data.strip():
+            st.warning("⚠️ Please paste some text first, or click 'Load Example' to try it out!")
+        else:
+            with st.spinner("Processing your data..."):
+                # Process data
+                lines = input_data.strip().split('\n')
+                results = []
+                stats = {"entries": 0, "errors": 0}
                 
-                try:
-                    if '*Deskripsi jalan*' in line:
-                        html, warnings = process_road_data(line, road_bg_color, road_border_color)
-                        results.append(("🛣️ ROAD", html, warnings))
-                        stats["roads"] += 1
-                        if warnings:
-                            all_warnings.append(f"Road entry {stats['roads']}: missing {', '.join(warnings)}")
-                    elif 'Nama PO' in line:
-                        html, warnings = process_poi_data(line, poi_bg_color, poi_border_color)
-                        results.append(("🏢 POI", html, warnings))
-                        stats["pois"] += 1
-                        if warnings:
-                            all_warnings.append(f"POI entry {stats['pois']}: missing {', '.join(warnings)}")
-                    else:
-                        results.append(("📄 OTHER", line, []))
-                        stats["other"] += 1
-                except Exception as e:
-                    results.append(("❌ ERROR", f"Error: {str(e)}\nOriginal: {line}", [str(e)]))
-                    stats["errors"] += 1
+                # Progress bar
+                progress_bar = st.progress(0)
                 
-                # Update progress
-                progress_bar.progress((i + 1) / len(lines))
-            
-            progress_bar.empty()
-            st.session_state.processed_results = (results, stats, all_warnings)
+                for i, line in enumerate(lines):
+                    if not line.strip():
+                        continue
+                    
+                    try:
+                        html, warnings = create_styled_html(line, card_bg_color, card_border_color, info_box_color)
+                        results.append(("📄 ENTRY", html, warnings))
+                        stats["entries"] += 1
+                    except Exception as e:
+                        results.append(("❌ ERROR", f"Error: {str(e)}\nOriginal: {line}", [str(e)]))
+                        stats["errors"] += 1
+                    
+                    # Update progress
+                    progress_bar.progress((i + 1) / len(lines))
+                
+                progress_bar.empty()
+                st.session_state.processed_results = (results, stats)
+                st.session_state.show_preview = False
 
-# Display results
+# Show preview
+if st.session_state.show_preview and input_data.strip():
+    st.divider()
+    st.subheader("👁️ Live Preview")
+    
+    lines = input_data.strip().split('\n')
+    for i, line in enumerate(lines, 1):
+        if line.strip():
+            with st.expander(f"Preview Entry {i}", expanded=True):
+                html, _ = create_styled_html(line, card_bg_color, card_border_color, info_box_color)
+                st.components.v1.html(html, height=400)
+
+# Display processed results
 if st.session_state.processed_results:
-    results, stats, all_warnings = st.session_state.processed_results
+    results, stats = st.session_state.processed_results
     
     # Success message and stats
-    st.success(f"✅ Successfully processed {len(results)} entries!")
+    st.success(f"✅ Successfully processed {stats['entries']} entries!")
     
     if show_stats:
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("🛣️ Roads", stats["roads"])
-        col2.metric("🏢 POIs", stats["pois"])
-        col3.metric("📄 Other", stats["other"])
-        col4.metric("❌ Errors", stats["errors"])
-    
-    # Show warnings if any
-    if all_warnings:
-        with st.expander("⚠️ Warnings", expanded=False):
-            for warning in all_warnings:
-                st.warning(warning)
+        col1, col2 = st.columns(2)
+        col1.metric("📄 Total Entries", stats["entries"])
+        col2.metric("❌ Errors", stats["errors"])
     
     # Download button for all HTML
-    html_results = [result for entry_type, result, _ in results if entry_type in ["🛣️ ROAD", "🏢 POI"]]
+    html_results = [result for entry_type, result, _ in results if entry_type == "📄 ENTRY"]
     if html_results:
         all_html = "\n\n<!-- ===== NEXT ENTRY ===== -->\n\n".join(html_results)
         st.download_button(
             label="📥 Download All HTML",
             data=all_html,
-            file_name="umap_descriptions.html",
+            file_name="styled_cards.html",
             mime="text/html",
             use_container_width=True
         )
@@ -347,14 +256,14 @@ if st.session_state.processed_results:
     st.subheader("📋 Individual Entries")
     
     for i, (entry_type, result, warnings) in enumerate(results, 1):
-        with st.expander(f"{entry_type} - Entry {i}", expanded=auto_expand):
+        with st.expander(f"{entry_type} {i}", expanded=auto_expand):
             if warnings:
-                st.warning(f"⚠️ Missing fields: {', '.join(warnings)}")
+                st.warning(f"⚠️ Issues: {', '.join(warnings)}")
             
-            if entry_type in ["🛣️ ROAD", "🏢 POI"]:
+            if entry_type == "📄 ENTRY":
                 # Preview
                 st.markdown("**Preview:**")
-                st.components.v1.html(result, height=300)
+                st.components.v1.html(result, height=400)
                 
                 # HTML code with copy button
                 col1, col2 = st.columns([4, 1])
@@ -372,7 +281,7 @@ if st.session_state.processed_results:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #666; padding: 20px;'>
-    <p>💡 <strong>Tip:</strong> Customize colors in the sidebar to match your uMap theme!</p>
-    <p>Made with ❤️ for easy uMap formatting</p>
+    <p>💡 <strong>Tip:</strong> This universal styler works with ANY colon-separated text format!</p>
+    <p>Made with ❤️ for easy HTML formatting</p>
 </div>
 """, unsafe_allow_html=True)
