@@ -24,13 +24,15 @@ with st.expander("📋 How to use"):
     - Page breaks after each separator
     - Bold titles for all sections
     - Universal styling for any input type
+    - Automatic field name extraction (removes "Info 1", "Info 2", etc.)
+    - Bold field names before colons
     """)
 
 # Input area
 input_data = st.text_area(
     "Paste your entire list here (use | as separator):",
     height=300,
-    placeholder="Paste your data here...\n\nExample:\n*Deskripsi jalan* | nama jalan (jalur contoh) | Jenis jalan (jalan aspal) | Lebar Jalan (5m)...\nNama POI | Contoh Facility | Jenis Fasum (sekolah) | Daya Tampung (100 orang)..."
+    placeholder="Paste your data here...\n\nExample:\n*Deskripsi jalan* | nama jalan (jalur contoh) | Jenis jalan (jalan aspal) | Lebar Jalan (5m)...\nNama POI | Contoh Facility | Jenis Fasum (sekolah) | Daya Tampung (100 orang)...\n\nOr like your example:\nSDN 2 Tiying tali | Desa: Tiying tali | Banjar: Banjar dinas tiyingtali kaler | Jenis: Gedung sekolah..."
 )
 
 # Universal styling function
@@ -86,6 +88,26 @@ def create_universal_html(title, fields, style_type="default"):
 '''
     return html_template.strip()
 
+def extract_field_name_value(part):
+    """
+    Extract field name and value from a part.
+    Removes 'Info 1', 'Info 2' etc and uses text before colon as field name.
+    """
+    # Remove "Info X:" patterns
+    cleaned_part = re.sub(r'^Info\s*\d+\s*:\s*', '', part.strip())
+    
+    # Split by first colon to separate field name and value
+    if ':' in cleaned_part:
+        field_name, field_value = cleaned_part.split(':', 1)
+        field_name = field_name.strip()
+        field_value = field_value.strip()
+    else:
+        # If no colon, use generic field name
+        field_name = "Informasi"
+        field_value = cleaned_part
+    
+    return field_name, field_value
+
 def process_road_data(text):
     """Process road data with pipe separator support"""
     parts = [part.strip() for part in text.split('|')]
@@ -95,35 +117,10 @@ def process_road_data(text):
     
     # If we have pipe-separated parts, use them
     if len(parts) > 1:
-        # Try to map parts to fields intelligently
-        field_mapping = {
-            'nama jalan': 'Nama Jalan',
-            'jenis jalan': 'Jenis Jalan', 
-            'lebar jalan': 'Lebar Jalan',
-            'karakter jalan': 'Karakter Jalan',
-            'kondisi jalan': 'Kondisi Jalan',
-            'keterangan': 'Keterangan'
-        }
-        
-        for i, part in enumerate(parts):
-            part_lower = part.lower()
-            for key, display_name in field_mapping.items():
-                if key in part_lower and not fields.get(display_name):
-                    # Extract value after colon or use the part itself
-                    if ':' in part:
-                        value = part.split(':', 1)[1].strip()
-                    else:
-                        value = part
-                    fields[display_name] = value
-                    break
-            else:
-                # If no specific field matched and this isn't the first part (title)
-                if i > 0 and not any(field in part_lower for field in ['deskripsi jalan', '*deskripsi*']):
-                    # Assign to generic additional info field
-                    if 'Additional Info' not in fields:
-                        fields['Additional Info'] = part
-                    else:
-                        fields['Additional Info'] += f" | {part}"
+        for i, part in enumerate(parts[1:], 1):  # Skip first part (title)
+            field_name, field_value = extract_field_name_value(part)
+            if field_value:  # Only add if value exists
+                fields[field_name] = field_value
     
     # Fallback to regex parsing if pipe parsing didn't work well
     if not fields:
@@ -156,31 +153,10 @@ def process_poi_data(text):
     
     # If we have pipe-separated parts, use them
     if len(parts) > 1:
-        field_mapping = {
-            'nama poi': 'Nama Fasilitas',
-            'nama po': 'Nama Fasilitas',
-            'jenis fasum': 'Jenis',
-            'daya tampung': 'Daya Tampung', 
-            'fasilitas': 'Fasilitas',
-            'keterangan': 'Keterangan'
-        }
-        
-        for i, part in enumerate(parts):
-            part_lower = part.lower()
-            for key, display_name in field_mapping.items():
-                if key in part_lower and not fields.get(display_name):
-                    if ':' in part:
-                        value = part.split(':', 1)[1].strip()
-                    else:
-                        value = part
-                    fields[display_name] = value
-                    break
-            else:
-                if i > 0 and not any(field in part_lower for field in ['nama poi', 'nama po']):
-                    if 'Additional Info' not in fields:
-                        fields['Additional Info'] = part
-                    else:
-                        fields['Additional Info'] += f" | {part}"
+        for i, part in enumerate(parts[1:], 1):  # Skip first part (title)
+            field_name, field_value = extract_field_name_value(part)
+            if field_value:  # Only add if value exists
+                fields[field_name] = field_value
     
     # Fallback to regex parsing
     if not fields:
@@ -209,14 +185,17 @@ def process_generic_data(text):
     
     if len(parts) == 1:
         # Single part - just return as is
-        fields = {'Deskripsi': parts[0]}
+        field_name, field_value = extract_field_name_value(parts[0])
+        fields = {field_name: field_value}
         title = "📌 Informasi"
     else:
         # Multiple parts - use first as title, rest as fields
         title = f"📌 {parts[0]}"
         fields = {}
         for i, part in enumerate(parts[1:], 1):
-            fields[f'Info {i}'] = part
+            field_name, field_value = extract_field_name_value(part)
+            if field_value:  # Only add if value exists
+                fields[field_name] = field_value
     
     return create_universal_html(title, fields, "default")
 
@@ -274,16 +253,19 @@ if st.button("🚀 Process Data", type="primary"):
 # Example data
 with st.expander("📝 Example Input Format"):
     st.markdown("""
-    **Using Pipe Separators:**
+    **Using Pipe Separators (Recommended):**
+    ```
+    SDN 2 Tiying tali | Desa: Tiying tali | Banjar: Banjar dinas tiyingtali kaler | Jenis: Gedung sekolah | Daya Tampung: +-400 | Fasilitas: listrik, sumber air, tollet | Bangunan: permanent | Luas Area: 15 are | Keterangan: di rencanakan sebagai tempat pengungsian
+    ```
+    
+    **Or with your original format:**
     ```
     *Deskripsi jalan* | Jalan Evakuasi Utama | Jenis jalan (jalan aspal) | Lebar Jalan (8 meter) | Karakter jalan (lurus) | Kondisi Jalan (baik) | Keterangan Tambahan: jalan utama evakuasi
     Nama POI | SDN Contoh Sekolah | Jenis Fasum (sekolah) | Daya Tampung (200 orang) | Fasilitas Pendukung (lapangan, ruang kelas) | Keterangan Tambahan: tempat pengungsian sementara
-    Informasi Umum | Data tambahan | Keterangan lain
     ```
     
-    **Or Original Format:**
-    ```
-    *Deskripsi jalan* 1. nama jalan (jalur contoh) Jenis jalan (jalan aspal) Lebar Jalan (5m)...
-    Nama POI : Contoh Facility Jenis Fasum (sekolah) Daya Tampung (100 orang)...
-    ```
+    **The app will automatically:**
+    - Remove "Info 1", "Info 2", etc. labels
+    - Make field names before colons bold
+    - Create clean, professional HTML output
     """)
