@@ -78,25 +78,48 @@ if st.button("🚀 Process Data", type="primary"):
 '''
             return html_template.strip()
 
-        def process_poi_data(text):
-            nama_match = re.search(r'Nama POI?\s*:?\s*([^\n\(]+)', text, re.IGNORECASE)
-            jenis_match = re.search(r'Jenis Fasum:\s*\(([^)]+)', text, re.IGNORECASE)
-            daya_match = re.search(r'Daya Tampung:\s*([^\n]+)', text, re.IGNORECASE)
-            fasilitas_match = re.search(r'Fasilitas Pendukung\s*\(([^)]+)', text, re.IGNORECASE)
-            keterangan_match = re.search(r'Keterangan Tambahan:\s*([^\n]+)', text, re.IGNORECASE)
+        def process_poi_data(poi_lines):
+            """Process multi-line POI data"""
+            poi_text = "\n".join(poi_lines)
             
+            # Extract fields with better regex patterns
+            nama_match = re.search(r'Nama POI?\s*:?\s*([^\n]+)', poi_text, re.IGNORECASE)
+            desa_match = re.search(r'Desa\s*:\s*([^\n]+)', poi_text, re.IGNORECASE)
+            banjar_match = re.search(r'Banjar\s*:\s*([^\n]+)', poi_text, re.IGNORECASE)
+            jenis_match = re.search(r'Jenis Fasum:\s*\(([^)]+)', poi_text, re.IGNORECASE)
+            daya_match = re.search(r'Daya Tampung:\s*([^\n]+)', poi_text, re.IGNORECASE)
+            fasilitas_match = re.search(r'Fasilitas Pendukung\s*\(([^)]+)', poi_text, re.IGNORECASE)
+            luas_match = re.search(r'Luas Area Terbuka:\s*([^\n]+)', poi_text, re.IGNORECASE)
+            keterangan_match = re.search(r'Keterangan Tambahan:\s*([^\n]+)', poi_text, re.IGNORECASE)
+            
+            # Clean and format the values
             nama = nama_match.group(1).strip() if nama_match else ""
+            desa = desa_match.group(1).strip() if desa_match else ""
+            banjar = banjar_match.group(1).strip() if banjar_match else ""
             jenis = jenis_match.group(1).strip() if jenis_match else "Fasilitas Umum"
             daya = daya_match.group(1).strip() if daya_match else ""
             fasilitas = fasilitas_match.group(1).strip() if fasilitas_match else ""
+            luas = luas_match.group(1).strip() if luas_match else ""
             keterangan = keterangan_match.group(1).strip() if keterangan_match else "tempat pengungsian"
+            
+            # Clean up daya tampung (remove +- and format)
+            if daya:
+                daya = daya.replace('+-', '±').strip()
             
             html_template = f'''
 <div style="font-family: Arial, sans-serif; background: #e8f4fd; border: 2px solid #b8daff; border-radius: 8px; padding: 12px;">
-<div style="display: grid; gap: 8px;">
+<div style="display: grid; gap: 6px;">
 <div style="display: flex; align-items: start;">
 <div style="min-width: 140px; font-weight: bold; color: #2c3e50;">Nama Fasilitas:</div>
 <div>{nama}</div>
+</div>
+<div style="display: flex; align-items: start;">
+<div style="min-width: 140px; font-weight: bold; color: #2c3e50;">Desa:</div>
+<div>{desa}</div>
+</div>
+<div style="display: flex; align-items: start;">
+<div style="min-width: 140px; font-weight: bold; color: #2c3e50;">Banjar:</div>
+<div>{banjar}</div>
 </div>
 <div style="display: flex; align-items: start;">
 <div style="min-width: 140px; font-weight: bold; color: #2c3e50;">Jenis:</div>
@@ -110,6 +133,10 @@ if st.button("🚀 Process Data", type="primary"):
 <div style="min-width: 140px; font-weight: bold; color: #2c3e50;">Fasilitas:</div>
 <div>{fasilitas}</div>
 </div>
+<div style="display: flex; align-items: start;">
+<div style="min-width: 140px; font-weight: bold; color: #2c3e50;">Luas Area:</div>
+<div>{luas}</div>
+</div>
 <div style="background: #fff3cd; padding: 8px; border-radius: 5px; margin-top: 5px;">
 <strong>Keterangan:</strong> {keterangan}
 </div>
@@ -118,33 +145,76 @@ if st.button("🚀 Process Data", type="primary"):
 '''
             return html_template.strip()
 
-        # Process data
+        # Process data with improved multi-line handling
         lines = input_data.strip().split('\n')
         results = []
         stats = {"roads": 0, "pois": 0, "other": 0}
         
-        for line in lines:
-            if not line.strip():
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+            if not line:
+                i += 1
                 continue
+                
             if '*Deskripsi jalan*' in line:
                 html = process_road_data(line)
                 results.append(("🛣️ ROAD", html))
                 stats["roads"] += 1
+                i += 1
+                
             elif 'Nama PO' in line:
-                html = process_poi_data(line)
+                # Collect all lines for this POI (until next entry or empty line)
+                poi_lines = [line]
+                i += 1
+                while i < len(lines) and lines[i].strip() and not ('*Deskripsi jalan*' in lines[i] or 'Nama PO' in lines[i]):
+                    poi_lines.append(lines[i].strip())
+                    i += 1
+                
+                html = process_poi_data(poi_lines)
                 results.append(("🏢 POI", html))
                 stats["pois"] += 1
+                
             else:
                 results.append(("📌 OTHER", line))
                 stats["other"] += 1
+                i += 1
 
         # Display results
-        st.success(f"✅ Processed {len(results)} entries")
+        st.success(f"✅ Processed {len(results)} entries: {stats['roads']} roads, {stats['pois']} POIs, {stats['other']} others")
         
-        for i, (entry_type, result) in enumerate(results, 1):
-            with st.expander(f"{entry_type} - Entry {i}"):
-                if entry_type in ["🛣️ ROAD", "🏢 POI"]:
-                    st.components.v1.html(result, height=300)
-                    st.code(result, language='html')
-                else:
-                    st.text(result)
+        # Create tabs for better organization
+        tab1, tab2, tab3 = st.tabs(["📋 All Results", "🛣️ Roads Only", "🏢 POIs Only"])
+        
+        with tab1:
+            for i, (entry_type, result) in enumerate(results, 1):
+                with st.expander(f"{entry_type} - Entry {i}", expanded=True):
+                    if entry_type in ["🛣️ ROAD", "🏢 POI"]:
+                        st.components.v1.html(result, height=400)
+                        st.code(result, language='html')
+                    else:
+                        st.text(result)
+        
+        with tab2:
+            roads = [r for t, r in results if t == "🛣️ ROAD"]
+            for i, road in enumerate(roads, 1):
+                with st.expander(f"Road {i}", expanded=True):
+                    st.components.v1.html(road, height=400)
+                    st.code(road, language='html')
+        
+        with tab3:
+            pois = [r for t, r in results if t == "🏢 POI"]
+            for i, poi in enumerate(pois, 1):
+                with st.expander(f"POI {i}", expanded=True):
+                    st.components.v1.html(poi, height=400)
+                    st.code(poi, language='html')
+
+        # Download option
+        st.markdown("### 💾 Download Results")
+        all_html = "\n\n".join([f"<!-- {t} -->\n{r}" for t, r in results])
+        st.download_button(
+            label="📥 Download All HTML",
+            data=all_html,
+            file_name="umap_descriptions.html",
+            mime="text/html"
+        )
