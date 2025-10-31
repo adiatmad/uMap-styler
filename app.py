@@ -24,13 +24,14 @@ with st.expander("📋 How to use"):
 input_data = st.text_area(
     "Paste your entire list here (use | as separator):",
     height=300,
-    placeholder="Paste your data here...\n\nExample:\nSDN 2 Tiying tali | Desa: Tiying tali | Banjar: Banjar dinas tiyingtali kaler | Jenis: Gedung sekolah..."
+    placeholder="Paste your data here...\n\nExample:\nnama jalan:jalur kelakah melingkar| Jenis jalan:Jalan desa| Lebar Jalan:2m| karakter jalan:beton..."
 )
 
 # Universal styling function
-def create_universal_html(title, fields, style_type="default"):
+def create_universal_html(fields, style_type="default"):
     """
     Create HTML for any type of data with universal styling
+    Tanpa title di dalam HTML
     """
     
     styles = {
@@ -57,16 +58,18 @@ def create_universal_html(title, fields, style_type="default"):
     fields_html = ""
     for field_name, field_value in fields.items():
         if field_value:
+            # Capitalize first letter of field name
+            capitalized_field_name = field_name[0].upper() + field_name[1:] if field_name else ""
+            
             fields_html += f'''
 <div style="display: flex; align-items: start; margin-bottom: 8px;">
-<div style="min-width: 160px; font-weight: bold; color: {style['title_color']};">{field_name}</div>
+<div style="min-width: 160px; font-weight: bold; color: {style['title_color']};">{capitalized_field_name}</div>
 <div style="flex: 1;">{field_value}</div>
 </div>
 '''
     
     html_template = f'''
 <div style="font-family: Arial, sans-serif; background: {style['background']}; border: {style['border']}; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
-<div style="font-size: 18px; font-weight: bold; color: {style['title_color']}; margin-bottom: 12px; border-bottom: 1px solid {style['border'].split(' ')[2]}; padding-bottom: 5px;">{title}</div>
 <div style="display: grid; gap: 8px;">
 {fields_html}
 </div>
@@ -129,7 +132,7 @@ def process_road_data(text):
         if keterangan_match:
             fields['Keterangan'] = f": {keterangan_match.group(1).strip()}"
     
-    return create_universal_html("🛣️ Deskripsi Jalan", fields, "road")
+    return create_universal_html(fields, "road")
 
 def process_poi_data(text):
     """Process POI data with pipe separator support"""
@@ -163,25 +166,49 @@ def process_poi_data(text):
         if keterangan_match:
             fields['Keterangan'] = f": {keterangan_match.group(1).strip()}"
     
-    return create_universal_html("🏢 Fasilitas Umum", fields, "poi")
+    return create_universal_html(fields, "poi")
 
 def process_generic_data(text):
     """Process any generic data with pipe separator"""
     parts = [part.strip() for part in text.split('|')]
     
+    fields = {}
+    
     if len(parts) == 1:
         field_name, field_value = extract_field_name_value(parts[0])
         fields = {field_name: field_value}
-        title = "📌 Informasi"
     else:
-        title = f"📌 {parts[0]}"
-        fields = {}
+        # Skip the first part (title) for processing, but use it for expander title
         for i, part in enumerate(parts[1:], 1):
             field_name, field_value = extract_field_name_value(part)
             if field_value:
                 fields[field_name] = field_value
     
-    return create_universal_html(title, fields, "default")
+    return create_universal_html(fields, "default")
+
+def get_expander_title(text):
+    """Get title for expander from the first part of the text - ambil text SETELAH colon"""
+    parts = [part.strip() for part in text.split('|')]
+    if parts:
+        first_part = parts[0]
+        # Extract text AFTER colon untuk judul
+        if ':' in first_part:
+            title = first_part.split(':', 1)[1].strip()  # Ambil bagian setelah colon
+        else:
+            title = first_part
+        
+        # Capitalize first letter
+        title = title[0].upper() + title[1:] if title else "Entry"
+        
+        # Add appropriate emoji based on content
+        if '*deskripsi jalan*' in text.lower() or 'nama jalan' in text.lower():
+            return f"🛣️ {title}"
+        elif 'nama po' in text.lower():
+            return f"🏢 {title}"
+        else:
+            return f"📌 {title}"
+    
+    return "📌 Entry"
 
 # Process button
 if st.button("🚀 Process Data", type="primary"):
@@ -200,15 +227,18 @@ if st.button("🚀 Process Data", type="primary"):
             
             if '*deskripsi jalan*' in line_lower or 'deskripsi jalan' in line_lower:
                 html = process_road_data(line)
-                results.append(("🛣️ ROAD", html))
+                expander_title = get_expander_title(line)
+                results.append(("🛣️ ROAD", expander_title, html))
                 stats["roads"] += 1
             elif 'nama po' in line_lower:
                 html = process_poi_data(line)
-                results.append(("🏢 POI", html))
+                expander_title = get_expander_title(line)
+                results.append(("🏢 POI", expander_title, html))
                 stats["pois"] += 1
             else:
                 html = process_generic_data(line)
-                results.append(("📌 OTHER", html))
+                expander_title = get_expander_title(line)
+                results.append(("📌 OTHER", expander_title, html))
                 stats["other"] += 1
 
         # Display results
@@ -223,8 +253,8 @@ if st.button("🚀 Process Data", type="primary"):
         </style>
         """, unsafe_allow_html=True)
         
-        for i, (entry_type, result) in enumerate(results, 1):
-            with st.expander(f"{entry_type} - Entry {i}"):
+        for i, (entry_type, expander_title, result) in enumerate(results, 1):
+            with st.expander(f"{expander_title} - Entry {i}"):
                 st.components.v1.html(result, height=400)
                 st.code(result, language='html')
                 
