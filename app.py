@@ -14,7 +14,10 @@ input_data = st.text_area(
 )
 
 def create_universal_html(content, title="Information", style="default"):
-    """Create HTML for any type of content"""
+    """Create HTML for any type of content with page breaks after commas and bold title"""
+    
+    # Add page breaks after commas
+    content_with_breaks = content.replace(',', ',<br>')
     
     # Choose style based on content type
     if style == "poi":
@@ -32,8 +35,8 @@ def create_universal_html(content, title="Information", style="default"):
     
     html_template = f'''
 <div style="font-family: Arial, sans-serif; background: {bg_color}; border: 2px solid {border_color}; border-radius: 8px; padding: 15px; margin: 10px 0;">
-<h3 style="margin: 0 0 15px 0; color: #2c3e50; border-bottom: 2px solid {border_color}; padding-bottom: 10px;">{icon} {title}</h3>
-<div style="line-height: 1.6; white-space: pre-line;">{content}</div>
+<h3 style="margin: 0 0 15px 0; color: #2c3e50; border-bottom: 2px solid {border_color}; padding-bottom: 10px;"><strong>{icon} {title}</strong></h3>
+<div style="line-height: 1.6; white-space: pre-line;">{content_with_breaks}</div>
 </div>
 '''
     return html_template.strip()
@@ -249,6 +252,10 @@ st.markdown("""
 2. **Extracts structured data** when possible  
 3. **Creates beautiful HTML** with appropriate styling
 4. **Provides copy buttons** for easy uMap integration
+
+**New Features:**
+- **Page breaks after commas** for better readability
+- **Bold titles** for emphasis
 
 **Perfect for your 124 mixed-format points!**
 """)
