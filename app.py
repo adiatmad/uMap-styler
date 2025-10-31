@@ -118,7 +118,7 @@ if st.button("🚀 Process Data", type="primary"):
             pois = [r for t, r in results if t == "🏢 POI"]
             for i, poi in enumerate(pois, 1):
                 with st.expander(f"POI {i}"):
-                    st.text_area("POI Data:", value=poi, height=200, key=fpoi_{i}")
+                    st.text_area("POI Data:", value=poi, height=200, key=f"poi_{i}")
         
         with tab3:
             roads = [r for t, r in results if t == "🛣️ ROAD"]
