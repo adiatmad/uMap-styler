@@ -1,103 +1,150 @@
 import streamlit as st
 import re
 
-st.set_page_config(page_title="uMap HTML Generator Pro", page_icon="🗺️", layout="wide")
+st.set_page_config(page_title="uMap HTML Generator", page_icon="🗺️", layout="wide")
 
-st.title("🗺️ uMap HTML Generator Pro")
-st.caption("Transform your text into clean, formatted uMap HTML descriptions")
+st.title("🗺️ uMap HTML Generator")
+st.subheader("Transform your road & POI data into beautiful uMap descriptions")
 
-# --- Sidebar controls ---
-st.sidebar.header("⚙️ Settings")
-bg_color = st.sidebar.color_picker("🖌️ Pick background color", "#f8f9fa")
-highlight_color = st.sidebar.color_picker("📦 Keterangan box color", "#fff3cd")
-auto_preview = st.sidebar.checkbox("Auto-preview while typing", value=False)
-auto_page_break = st.sidebar.checkbox("Auto page break after ':'", value=True)
-show_keterangan_box = st.sidebar.checkbox("Show 'Keterangan Tambahan' as box", value=True)
+# Instructions
+with st.expander("📋 How to use"):
+    st.markdown("""
+    1. **Paste your raw data** in the text area below
+    2. **Click 'Process Data'** 
+    3. **Copy the HTML output** for each entry
+    4. **Paste into uMap** description fields
+    
+    The app automatically detects:
+    - 🛣️ **Road descriptions** (starts with '*Deskripsi jalan*')
+    - 🏢 **POI/Facilities** (starts with 'Nama PO')
+    - 🔄 **Other entries** (kept as-is)
+    """)
 
-# --- Input area ---
-st.subheader("✏️ Live Editor")
+# Input area
 input_data = st.text_area(
-    "Paste or type your text below:",
-    height=280,
-    placeholder=(
-        "Example:\n"
-        "Nama POI: SDN 1 Tiyingtali\n"
-        "Desa: Tiing tali\n"
-        "Banjar: Banjar dinas Tiyingtali kelod\n"
-        "Jenis Fasum: (Gedung sekolah)\n"
-        "Daya Tampung: +-600\n"
-        "Fasilitas Pendukung: (listrik, sumber air, toilet)\n"
-        "Kontak person: \n"
-        "Jenis Bangunan: permanen\n"
-        "Luas Area Terbuka: 25 are\n"
-        "Keterangan Tambahan: di rencanakan sebagai tempat pengungsian"
-    ),
+    "Paste your entire list here:",
+    height=300,
+    placeholder="Paste your data here...\n\nExample:\n*Deskripsi jalan* 1. nama jalan (jalur contoh)...\nNama POI : Contoh Facility..."
 )
 
-# --- Processing function ---
-def generate_html(text: str) -> str:
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    rows = []
-    keterangan_value = ""
-
-    for line in lines:
-        if ":" in line:
-            key, value = line.split(":", 1)
-            key, value = key.strip(), value.strip()
-            if key.lower().startswith("keterangan tambahan"):
-                keterangan_value = value
-            else:
-                if auto_page_break:
-                    value = re.sub(r":", ":<br>", value)
-                rows.append(f"""
-                    <tr>
-                        <td style='font-weight:bold; color:#2c3e50; vertical-align:top; padding:6px 12px; width:180px;'>
-                            {key}
-                        </td>
-                        <td style='padding:6px 12px;'>
-                            {value}
-                        </td>
-                    </tr>
-                """)
-
-    # Main table
-    table_html = f"""
-    <table style='width:100%; border-collapse:collapse;'>
-        {''.join(rows)}
-    </table>
-    """
-
-    # Optional keterangan box
-    if show_keterangan_box and keterangan_value:
-        keterangan_box = f"""
-        <div style='background:{highlight_color}; margin-top:12px; padding:10px; border-radius:6px;'>
-            <strong>Keterangan Tambahan:</strong> {keterangan_value}
-        </div>
-        """
-    else:
-        keterangan_box = ""
-
-    # Combine
-    final_html = f"""
-    <div style='font-family:Arial, sans-serif; background:{bg_color}; border:2px solid #dee2e6;
-                border-radius:10px; padding:16px; line-height:1.5;'>
-        {table_html}
-        {keterangan_box}
-    </div>
-    """
-    return final_html.strip()
-
-# --- Run & Preview ---
-run_clicked = st.button("🚀 Run & Preview")
-
-if run_clicked or (auto_preview and input_data.strip()):
+# Process button
+if st.button("🚀 Process Data", type="primary"):
     if not input_data.strip():
-        st.warning("⚠️ Please input some text first.")
+        st.warning("Please paste some data first!")
     else:
-        html_output = generate_html(input_data)
-        st.success("✅ HTML Generated Successfully")
-        st.components.v1.html(html_output, height=400, scrolling=True)
-        st.code(html_output, language="html")
+        def process_road_data(text):
+            nama_match = re.search(r'nama jalan\s*\(\s*(jalur[^)]+)', text, re.IGNORECASE)
+            jenis_match = re.search(r'Jenis jalan\s*\(\s*([^)]+)', text, re.IGNORECASE)
+            lebar_match = re.search(r'Lebar Jalan\s*\(\s*([^)]+)', text, re.IGNORECASE)
+            karakter_match = re.search(r'karakter jalan\s*\(\s*([^)]+)', text, re.IGNORECASE)
+            kondisi_match = re.search(r'Kondisi Jalan\s*\(\s*([^)]+)', text, re.IGNORECASE)
+            keterangan_match = re.search(r'Keterangan Tambahan\s*:([^<]*)', text, re.IGNORECASE)
+            
+            nama = nama_match.group(1).strip() if nama_match else "jalur"
+            jenis = jenis_match.group(1).strip() if jenis_match else ""
+            lebar = lebar_match.group(1).strip() if lebar_match else ""
+            karakter = karakter_match.group(1).strip() if karakter_match else ""
+            kondisi = kondisi_match.group(1).strip() if kondisi_match else ""
+            keterangan = keterangan_match.group(1).strip() if keterangan_match else "jalan evakuasi"
+            
+            html_template = f'''
+<div style="font-family: Arial, sans-serif; background: #fff3cd; border: 2px solid #ffeaa7; border-radius: 8px; padding: 12px;">
+<div style="display: grid; gap: 8px;">
+<div style="display: flex; align-items: start;">
+<div style="min-width: 120px; font-weight: bold; color: #2c3e50;">Nama Jalan:</div>
+<div>{nama}</div>
+</div>
+<div style="display: flex; align-items: start;">
+<div style="min-width: 120px; font-weight: bold; color: #2c3e50;">Jenis Jalan:</div>
+<div>{jenis}</div>
+</div>
+<div style="display: flex; align-items: start;">
+<div style="min-width: 120px; font-weight: bold; color: #2c3e50;">Lebar Jalan:</div>
+<div>{lebar}</div>
+</div>
+<div style="display: flex; align-items: start;">
+<div style="min-width: 120px; font-weight: bold; color: #2c3e50;">Karakter Jalan:</div>
+<div>{karakter}</div>
+</div>
+<div style="display: flex; align-items: start;">
+<div style="min-width: 120px; font-weight: bold; color: #2c3e50;">Kondisi Jalan:</div>
+<div>✅ {kondisi}</div>
+</div>
+<div style="background: #d4edda; padding: 8px; border-radius: 5px; margin-top: 5px;">
+<strong>Keterangan:</strong> {keterangan}
+</div>
+</div>
+</div>
+'''
+            return html_template.strip()
 
-st.markdown("---")
-st.caption("💡 Tip: Use sidebar to customize background color or toggle the Keterangan box.")
+        def process_poi_data(text):
+            nama_match = re.search(r'Nama POI?\s*:?\s*([^\n\(]+)', text, re.IGNORECASE)
+            jenis_match = re.search(r'Jenis Fasum:\s*\(([^)]+)', text, re.IGNORECASE)
+            daya_match = re.search(r'Daya Tampung:\s*([^\n]+)', text, re.IGNORECASE)
+            fasilitas_match = re.search(r'Fasilitas Pendukung\s*\(([^)]+)', text, re.IGNORECASE)
+            keterangan_match = re.search(r'Keterangan Tambahan:\s*([^\n]+)', text, re.IGNORECASE)
+            
+            nama = nama_match.group(1).strip() if nama_match else ""
+            jenis = jenis_match.group(1).strip() if jenis_match else "Fasilitas Umum"
+            daya = daya_match.group(1).strip() if daya_match else ""
+            fasilitas = fasilitas_match.group(1).strip() if fasilitas_match else ""
+            keterangan = keterangan_match.group(1).strip() if keterangan_match else "tempat pengungsian"
+            
+            html_template = f'''
+<div style="font-family: Arial, sans-serif; background: #e8f4fd; border: 2px solid #b8daff; border-radius: 8px; padding: 12px;">
+<div style="display: grid; gap: 8px;">
+<div style="display: flex; align-items: start;">
+<div style="min-width: 140px; font-weight: bold; color: #2c3e50;">Nama Fasilitas:</div>
+<div>{nama}</div>
+</div>
+<div style="display: flex; align-items: start;">
+<div style="min-width: 140px; font-weight: bold; color: #2c3e50;">Jenis:</div>
+<div>{jenis}</div>
+</div>
+<div style="display: flex; align-items: start;">
+<div style="min-width: 140px; font-weight: bold; color: #2c3e50;">Daya Tampung:</div>
+<div>{daya}</div>
+</div>
+<div style="display: flex; align-items: start;">
+<div style="min-width: 140px; font-weight: bold; color: #2c3e50;">Fasilitas:</div>
+<div>{fasilitas}</div>
+</div>
+<div style="background: #fff3cd; padding: 8px; border-radius: 5px; margin-top: 5px;">
+<strong>Keterangan:</strong> {keterangan}
+</div>
+</div>
+</div>
+'''
+            return html_template.strip()
+
+        # Process data
+        lines = input_data.strip().split('\n')
+        results = []
+        stats = {"roads": 0, "pois": 0, "other": 0}
+        
+        for line in lines:
+            if not line.strip():
+                continue
+            if '*Deskripsi jalan*' in line:
+                html = process_road_data(line)
+                results.append(("🛣️ ROAD", html))
+                stats["roads"] += 1
+            elif 'Nama PO' in line:
+                html = process_poi_data(line)
+                results.append(("🏢 POI", html))
+                stats["pois"] += 1
+            else:
+                results.append(("📌 OTHER", line))
+                stats["other"] += 1
+
+        # Display results
+        st.success(f"✅ Processed {len(results)} entries")
+        
+        for i, (entry_type, result) in enumerate(results, 1):
+            with st.expander(f"{entry_type} - Entry {i}"):
+                if entry_type in ["🛣️ ROAD", "🏢 POI"]:
+                    st.components.v1.html(result, height=300)
+                    st.code(result, language='html')
+                else:
+                    st.text(result)
