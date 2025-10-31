@@ -250,5 +250,5 @@ if st.button("🚀 Process Comma-Separated Data", type="primary"):
         )
 
 st.markdown("---")
+st.markdown("**📝 Expected Input Format:**")
 st.markdown("""
-**📝 Expected Input Format:**
