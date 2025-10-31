@@ -156,12 +156,18 @@ if st.button("🚀 Generate uMap HTML", type="primary"):
 
 # Instructions
 st.markdown("---")
+st.markdown("### 📋 Cara Penggunaan:")
 st.markdown("""
-### 📋 Cara Penggunaan:
-
 1. **Paste data POI** Anda di text area atas
 2. **Klik tombol "Generate uMap HTML"**
 3. **Copy HTML code** yang dihasilkan
 4. **Paste di uMap** pada field "description"
+""")
 
-### 📝 Format Input yang Didukung:
+st.markdown("### 📝 Format Input yang Didukung:")
+st.code("Nama POI : SDN 1 Tiyingtali, Desa: Tiing tali, Banjar: Banjar dinas Tiyingtali kelod, Jenis Fasum: (Gedung sekolah), Daya Tampung: +-600, Fasilitas Pendukung (listrik,sumber air, toilet), Kontak person:, Jenis Bangunan: permanen, Luas Area Terbuka: 25 are, Keterangan Tambahan: di rencanakan sebagai tempat pengungsian")
+
+st.markdown("### 🎯 Hasil yang Diharapkan:")
+st.markdown("- HTML yang bersih dan rapi")
+st.markdown("- Tampilan table-like yang mudah dibaca") 
+st.markdown("- Compatible dengan uMap")
