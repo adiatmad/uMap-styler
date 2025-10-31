@@ -251,4 +251,4 @@ if st.button("🚀 Process Comma-Separated Data", type="primary"):
 
 st.markdown("---")
 st.markdown("**📝 Expected Input Format:**")
-st.markdown("""
+st.code("Nama POI : [Name], Desa: [Village], Banjar: [Banjar], Jenis Fasum: (Type), Daya Tampung: [Capacity], Fasilitas Pendukung (facilities), Kontak person: [Contact], Jenis Bangunan: [Type], Luas Area Terbuka: [Area], Keterangan Tambahan: [Remarks]")
