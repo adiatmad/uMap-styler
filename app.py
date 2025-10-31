@@ -4,182 +4,164 @@ import re
 st.set_page_config(page_title="uMap HTML Generator", page_icon="🗺️", layout="wide")
 
 st.title("🗺️ uMap HTML Generator")
-st.subheader("Transform comma-separated data into beautiful uMap tables")
+st.subheader("Transform your data into uMap-ready HTML")
 
 # Input area
 input_data = st.text_area(
-    "Paste your comma-separated data here:",
-    height=400,
-    placeholder="Paste your data here...\n\nExample:\nNama POI : SDN 1 Tiyingtali, Desa: Tiing tali, Jenis Fasum: (Gedung sekolah), Daya Tampung: +-600..."
+    "Paste your data here:",
+    height=300,
+    placeholder="Paste your POI data here...\n\nExample:\nNama POI : SDN 1 Tiyingtali, Desa: Tiing tali, Jenis Fasum: (Gedung sekolah), Daya Tampung: +-600..."
 )
 
-def create_poi_html(fields):
-    """Create HTML for POI entries with table layout"""
-    # Clean the fields
+def create_simple_poi_html(fields):
+    """Create simple, clean HTML for POI entries"""
+    # Ensure all fields have values
     nama = fields.get('nama', 'Fasilitas').strip()
     desa = fields.get('desa', '').strip()
     banjar = fields.get('banjar', '').strip()
-    jenis_fasum = fields.get('jenis_fasum', '').strip()
-    daya_tampung = fields.get('daya_tampung', '').strip()
+    jenis = fields.get('jenis_fasum', '').strip()
+    daya = fields.get('daya_tampung', '').strip()
     fasilitas = fields.get('fasilitas', '').strip()
-    kontak_person = fields.get('kontak_person', '').strip()
-    jenis_bangunan = fields.get('jenis_bangunan', '').strip()
-    luas_area = fields.get('luas_area', '').strip()
+    kontak = fields.get('kontak_person', '').strip()
+    bangunan = fields.get('jenis_bangunan', '').strip()
+    luas = fields.get('luas_area', '').strip()
     keterangan = fields.get('keterangan', '').strip()
 
-    html_template = f'''
-<div style="font-family: Arial, sans-serif; background: #e8f4fd; border: 2px solid #b8daff; border-radius: 8px; padding: 15px; margin: 10px 0;">
-<h3 style="margin: 0 0 15px 0; color: #2c3e50; text-align: center;">🏢 {nama}</h3>
-<table style="width: 100%; border-collapse: collapse;">
-<tr><td style="padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold; width: 35%;">Nama Fasilitas</td><td style="padding: 8px; border-bottom: 1px solid #dee2e6;">{nama}</td></tr>
-<tr><td style="padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;">Lokasi</td><td style="padding: 8px; border-bottom: 1px solid #dee2e6;">Desa {desa}, Banjar {banjar}</td></tr>
-<tr><td style="padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;">Jenis Fasilitas</td><td style="padding: 8px; border-bottom: 1px solid #dee2e6;">{jenis_fasum}</td></tr>
-<tr><td style="padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;">Daya Tampung</td><td style="padding: 8px; border-bottom: 1px solid #dee2e6;">{daya_tampung}</td></tr>
-<tr><td style="padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;">Fasilitas Pendukung</td><td style="padding: 8px; border-bottom: 1px solid #dee2e6;">{fasilitas}</td></tr>
-<tr><td style="padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;">Kontak Person</td><td style="padding: 8px; border-bottom: 1px solid #dee2e6;">{kontak_person}</td></tr>
-<tr><td style="padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;">Jenis Bangunan</td><td style="padding: 8px; border-bottom: 1px solid #dee2e6;">{jenis_bangunan}</td></tr>
-<tr><td style="padding: 8px; border-bottom: 1px solid #dee2e6; font-weight: bold;">Luas Area Terbuka</td><td style="padding: 8px; border-bottom: 1px solid #dee2e6;">{luas_area}</td></tr>
-<tr><td style="padding: 8px; font-weight: bold; background: #fff3cd;">Keterangan</td><td style="padding: 8px; background: #fff3cd;">{keterangan}</td></tr>
-</table>
+    html = f'''
+<div style="font-family: Arial, sans-serif; background: #f8f9fa; border: 2px solid #dee2e6; border-radius: 8px; padding: 15px;">
+<h3 style="margin: 0 0 15px 0; color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px;">🏢 {nama}</h3>
+<div style="line-height: 1.6;">
+'''
+    
+    # Add fields only if they have values
+    if desa:
+        html += f'<div><strong>Desa:</strong> {desa}</div>'
+    if banjar:
+        html += f'<div><strong>Banjar:</strong> {banjar}</div>'
+    if jenis:
+        html += f'<div><strong>Jenis Fasilitas:</strong> {jenis}</div>'
+    if daya:
+        html += f'<div><strong>Daya Tampung:</strong> {daya}</div>'
+    if fasilitas:
+        html += f'<div><strong>Fasilitas:</strong> {fasilitas}</div>'
+    if kontak:
+        html += f'<div><strong>Kontak Person:</strong> {kontak}</div>'
+    if bangunan:
+        html += f'<div><strong>Jenis Bangunan:</strong> {bangunan}</div>'
+    if luas:
+        html += f'<div><strong>Luas Area:</strong> {luas}</div>'
+    if keterangan:
+        html += f'<div style="margin-top: 10px; padding: 10px; background: #e8f4fd; border-radius: 5px;"><strong>Keterangan:</strong> {keterangan}</div>'
+    
+    html += '''
+</div>
 </div>
 '''
-    return html_template.strip()
+    return html.strip()
 
-def parse_comma_separated_poi(text):
-    """Parse comma-separated POI data with better field extraction"""
+def manual_parse_poi(text):
+    """Manual parsing for POI data - more reliable"""
     fields = {}
     
-    # Clean the text first
-    text = text.strip()
+    # Simple manual extraction
+    parts = text.split(',')
     
-    # Extract Nama POI first (handle both "Nama POI :" and "Nama PO:")
-    nama_match = re.search(r'Nama POI?\s*:?\s*([^,]+)', text, re.IGNORECASE)
-    if nama_match:
-        fields['nama'] = nama_match.group(1).strip()
-    
-    # Define patterns for each field with better regex
-    patterns = {
-        'desa': r'Desa:\s*([^,]+)',
-        'banjar': r'Banjar:\s*([^,]+)',
-        'jenis_fasum': r'Jenis Fasum:\s*\(([^)]+)\)',
-        'daya_tampung': r'Daya Tampung:\s*([^,]+)',
-        'fasilitas': r'Fasilitas Pendukung\s*\(([^)]+)\)',
-        'kontak_person': r'Kontak person:\s*([^,]+)',
-        'jenis_bangunan': r'Jenis Bangunan:\s*([^,]+)',
-        'luas_area': r'Luas Area Terbuka:\s*([^,]+)',
-        'keterangan': r'Keterangan Tambahan:\s*([^,]+)'
-    }
-    
-    for field, pattern in patterns.items():
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            fields[field] = match.group(1).strip()
-        else:
-            fields[field] = ""
+    for part in parts:
+        part = part.strip()
+        
+        # Nama POI
+        if 'Nama PO' in part:
+            if ':' in part:
+                fields['nama'] = part.split(':', 1)[1].strip()
+            else:
+                fields['nama'] = part.replace('Nama POI', '').replace('Nama PO', '').strip()
+        
+        # Desa
+        elif 'Desa:' in part:
+            fields['desa'] = part.split(':', 1)[1].strip()
+        
+        # Banjar
+        elif 'Banjar:' in part:
+            fields['banjar'] = part.split(':', 1)[1].strip()
+        
+        # Jenis Fasum
+        elif 'Jenis Fasum:' in part:
+            value = part.split(':', 1)[1].strip()
+            # Remove parentheses if present
+            if value.startswith('(') and value.endswith(')'):
+                value = value[1:-1]
+            fields['jenis_fasum'] = value
+        
+        # Daya Tampung
+        elif 'Daya Tampung:' in part:
+            fields['daya_tampung'] = part.split(':', 1)[1].strip()
+        
+        # Fasilitas Pendukung
+        elif 'Fasilitas Pendukung' in part:
+            if '(' in part and ')' in part:
+                start = part.find('(') + 1
+                end = part.find(')')
+                fields['fasilitas'] = part[start:end].strip()
+        
+        # Kontak person
+        elif 'Kontak person:' in part:
+            fields['kontak_person'] = part.split(':', 1)[1].strip()
+        
+        # Jenis Bangunan
+        elif 'Jenis Bangunan:' in part:
+            fields['jenis_bangunan'] = part.split(':', 1)[1].strip()
+        
+        # Luas Area Terbuka
+        elif 'Luas Area Terbuka:' in part:
+            fields['luas_area'] = part.split(':', 1)[1].strip()
+        
+        # Keterangan Tambahan
+        elif 'Keterangan Tambahan:' in part:
+            fields['keterangan'] = part.split(':', 1)[1].strip()
     
     return fields
 
-def process_poi_data(text):
-    """Process POI data"""
-    fields = parse_comma_separated_poi(text)
-    
-    # Create structured text with proper formatting
-    structured_text = f"""Nama Fasilitas: {fields.get('nama', '')}
-Desa: {fields.get('desa', '')}
-Banjar: {fields.get('banjar', '')}
-Jenis Fasum: {fields.get('jenis_fasum', '')}
-Daya Tampung: {fields.get('daya_tampung', '')}
-Fasilitas Pendukung: {fields.get('fasilitas', '')}
-Kontak Person: {fields.get('kontak_person', '')}
-Jenis Bangunan: {fields.get('jenis_bangunan', '')}
-Luas Area Terbuka: {fields.get('luas_area', '')}
-Keterangan Tambahan: {fields.get('keterangan', '')}"""
-    
-    # Create HTML
-    html_code = create_poi_html(fields)
-    
-    return structured_text, html_code, fields
-
-if st.button("🚀 Process Comma-Separated Data", type="primary"):
+if st.button("🚀 Generate uMap HTML", type="primary"):
     if not input_data.strip():
         st.warning("Please paste some data first!")
     else:
-        lines = input_data.strip().split('\n')
-        results = []
+        lines = [line.strip() for line in input_data.split('\n') if line.strip()]
         
-        for line in lines:
-            if not line.strip():
-                continue
-                
+        for i, line in enumerate(lines, 1):
             if 'Nama PO' in line:
-                # POI entry
-                try:
-                    structured, html, fields = process_poi_data(line)
-                    results.append(("🏢 POI", line, structured, html, fields))
-                except Exception as e:
-                    st.error(f"Error processing line: {line}")
-                    st.error(f"Error details: {str(e)}")
-        
-        # Display results
-        if results:
-            st.success(f"✅ Processed {len(results)} POI entries")
-            
-            # Show results
-            for i, (entry_type, original, structured, html, fields) in enumerate(results, 1):
-                with st.expander(f"{entry_type} - Entry {i}: {fields.get('nama', 'Unknown')}"):
-                    col1, col2 = st.columns([1, 1])
+                with st.expander(f"POI {i}", expanded=True):
+                    st.text("Input Data:")
+                    st.code(line, language='text')
                     
-                    with col1:
-                        st.text("Original Data:")
-                        st.code(original, language='text')
-                        
-                        st.text("Structured Data:")
-                        st.code(structured, language='text')
-                        
-                        st.text("Extracted Fields:")
-                        for key, value in fields.items():
-                            if value:
-                                st.text(f"• {key}: {value}")
+                    # Parse the data
+                    fields = manual_parse_poi(line)
                     
-                    with col2:
-                        if html:
-                            st.text("HTML Table Preview:")
-                            st.components.v1.html(html, height=450)
-                            
-                            st.text("HTML Code (Copy this for uMap):")
-                            st.code(html, language='html')
-                            
-                            # Copy button
-                            if st.button(f"📋 Copy HTML to Clipboard", key=f"copy_{i}"):
-                                st.code(html, language='html')
-                                st.success("✅ HTML copied! Paste this into uMap description field.")
-
-            # Download all HTML
-            st.markdown("### 💾 Download All HTML Tables")
-            all_html = "\n\n".join([f"<!-- {fields.get('nama', 'POI')} -->\n{h}" for t, o, s, h, fields in results if h])
-            st.download_button(
-                label="📥 Download All HTML Tables",
-                data=all_html,
-                file_name="umap_tables.html",
-                mime="text/html"
-            )
-        else:
-            st.warning("No POI entries found in the input data.")
+                    st.text("Parsed Fields:")
+                    for key, value in fields.items():
+                        if value:
+                            st.text(f"• {key}: {value}")
+                    
+                    # Generate HTML
+                    html = create_simple_poi_html(fields)
+                    
+                    st.text("HTML Preview:")
+                    st.components.v1.html(html, height=400)
+                    
+                    st.text("HTML Code (Copy this for uMap):")
+                    st.code(html, language='html')
+                    
+                    # Copy button
+                    if st.button(f"📋 Copy HTML", key=f"copy_{i}"):
+                        st.success("✅ HTML copied! Paste this into uMap description field.")
 
 # Instructions
-with st.expander("📋 How to use this tool"):
-    st.markdown("""
-    1. **Paste your comma-separated POI data** in the text area above
-    2. **Click 'Process Comma-Separated Data'**
-    3. **Check the HTML Preview** to see how it will look in uMap
-    4. **Copy the HTML Code** using the copy button
-    5. **Paste into uMap** in the description field of your point
-
-    **Expected Input Format:**
-    ```
-    Nama POI : SDN 1 Tiyingtali, Desa: Tiing tali, Banjar: Banjar dinas Tiyingtali kelod, Jenis Fasum: (Gedung sekolah), Daya Tampung: +-600, Fasilitas Pendukung (listrik,sumber air, toilet), Kontak person:, Jenis Bangunan: permanen, Luas Area Terbuka: 25 are, Keterangan Tambahan: di rencanakan sebagai tempat pengungsian
-    ```
-    """)
-
 st.markdown("---")
-st.markdown("**✨ Tip:** The HTML tables work perfectly in uMap when pasted into the description field!")
+st.markdown("""
+### 📋 Cara Penggunaan:
+
+1. **Paste data POI** Anda di text area atas
+2. **Klik tombol "Generate uMap HTML"**
+3. **Copy HTML code** yang dihasilkan
+4. **Paste di uMap** pada field "description"
+
+### 📝 Format Input yang Didukung:
