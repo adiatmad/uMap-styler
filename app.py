@@ -3,23 +3,6 @@ import re
 
 st.set_page_config(page_title="uMap HTML Generator", page_icon="🗺️", layout="wide")
 
-# Initialize session state for styling options
-if 'styling' not in st.session_state:
-    st.session_state.styling = {
-        'bg_color_road': "#fff3cd",
-        'bg_color_poi': "#e8f4fd", 
-        'bg_color_default': "#f8f9fa",
-        'border_color_road': "#ffeaa7",
-        'border_color_poi': "#b8daff",
-        'border_color_default': "#dee2e6",
-        'title_color_road': "#2c3e50",
-        'title_color_poi': "#2c3e50",
-        'title_color_default': "#495057",
-        'bold_fields': True,
-        'italic_fields': False,
-        'underline_fields': False
-    }
-
 st.title("🗺️ uMap HTML Generator")
 st.subheader("Transform your road & POI data into beautiful uMap descriptions")
 
@@ -27,134 +10,77 @@ st.subheader("Transform your road & POI data into beautiful uMap descriptions")
 with st.expander("📋 How to use"):
     st.markdown("""
     1. **Paste your raw data** in the text area below (use | as separator)
-    2. **Customize styling** using the options in the sidebar
-    3. **Click 'Process Data'** 
-    4. **Copy the HTML output** for each entry
-    5. **Paste into uMap** description fields
+    2. **Click 'Process Data'** 
+    3. **Copy the HTML output** for each entry
+    4. **Paste into uMap** description fields
     
     The app automatically detects:
     - 🛣️ **Road descriptions** (starts with '*Deskripsi jalan*')
     - 🏢 **POI/Facilities** (starts with 'Nama PO')
     - 🔄 **Other entries** (kept as-is)
+    
+    **New features:**
+    - Use `|` as field separator
+    - Page breaks after each separator
+    - Bold titles for all sections
+    - Universal styling for any input type
+    - Automatic field name extraction (removes "Info 1", "Info 2", etc.)
+    - Bold field names before colons
     """)
-
-# Sidebar for styling options
-st.sidebar.header("🎨 Custom Styling")
-
-# Background color selection
-st.sidebar.subheader("Background Colors")
-bg_color_road = st.sidebar.color_picker("Road Background", st.session_state.styling['bg_color_road'], key="road_bg")
-bg_color_poi = st.sidebar.color_picker("POI Background", st.session_state.styling['bg_color_poi'], key="poi_bg")
-bg_color_default = st.sidebar.color_picker("Default Background", st.session_state.styling['bg_color_default'], key="default_bg")
-
-# Border color selection
-st.sidebar.subheader("Border Colors")
-border_color_road = st.sidebar.color_picker("Road Border", st.session_state.styling['border_color_road'], key="road_border")
-border_color_poi = st.sidebar.color_picker("POI Border", st.session_state.styling['border_color_poi'], key="poi_border")
-border_color_default = st.sidebar.color_picker("Default Border", st.session_state.styling['border_color_default'], key="default_border")
-
-# Text formatting options
-st.sidebar.subheader("Text Formatting")
-bold_fields = st.sidebar.checkbox("Bold Field Names", value=st.session_state.styling['bold_fields'], key="bold")
-italic_fields = st.sidebar.checkbox("Italic Field Names", value=st.session_state.styling['italic_fields'], key="italic")
-underline_fields = st.sidebar.checkbox("Underline Field Names", value=st.session_state.styling['underline_fields'], key="underline")
-
-# Title color selection
-st.sidebar.subheader("Title Colors")
-title_color_road = st.sidebar.color_picker("Road Titles", st.session_state.styling['title_color_road'], key="road_title")
-title_color_poi = st.sidebar.color_picker("POI Titles", st.session_state.styling['title_color_poi'], key="poi_title")
-title_color_default = st.sidebar.color_picker("Default Titles", st.session_state.styling['title_color_default'], key="default_title")
-
-# Update session state with current values
-st.session_state.styling.update({
-    'bg_color_road': bg_color_road,
-    'bg_color_poi': bg_color_poi,
-    'bg_color_default': bg_color_default,
-    'border_color_road': border_color_road,
-    'border_color_poi': border_color_poi,
-    'border_color_default': border_color_default,
-    'title_color_road': title_color_road,
-    'title_color_poi': title_color_poi,
-    'title_color_default': title_color_default,
-    'bold_fields': bold_fields,
-    'italic_fields': italic_fields,
-    'underline_fields': underline_fields
-})
-
-# Reset to defaults
-if st.sidebar.button("Reset to Defaults"):
-    st.session_state.styling = {
-        'bg_color_road': "#fff3cd",
-        'bg_color_poi': "#e8f4fd", 
-        'bg_color_default': "#f8f9fa",
-        'border_color_road': "#ffeaa7",
-        'border_color_poi': "#b8daff",
-        'border_color_default': "#dee2e6",
-        'title_color_road': "#2c3e50",
-        'title_color_poi': "#2c3e50",
-        'title_color_default': "#495057",
-        'bold_fields': True,
-        'italic_fields': False,
-        'underline_fields': False
-    }
-    st.rerun()
 
 # Input area
 input_data = st.text_area(
     "Paste your entire list here (use | as separator):",
     height=300,
-    placeholder="Paste your data here...\n\nExample:\nnama jalan:jalur kelakah melingkar| Jenis jalan:Jalan desa| Lebar Jalan:2m| karakter jalan:beton..."
+    placeholder="Paste your data here...\n\nExample:\n*Deskripsi jalan* | nama jalan (jalur contoh) | Jenis jalan (jalan aspal) | Lebar Jalan (5m)...\nNama POI | Contoh Facility | Jenis Fasum (sekolah) | Daya Tampung (100 orang)...\n\nOr like your example:\nSDN 2 Tiying tali | Desa: Tiying tali | Banjar: Banjar dinas tiyingtali kaler | Jenis: Gedung sekolah..."
 )
 
 # Universal styling function
-def create_universal_html(fields, style_type="default"):
+def create_universal_html(title, fields, style_type="default"):
     """
     Create HTML for any type of data with universal styling
-    Tanpa title di dalam HTML
+    
+    Parameters:
+    - title: The main title (will be bold)
+    - fields: Dictionary of field_name: field_value pairs
+    - style_type: "road", "poi", or "default"
     """
     
-    # Apply user-selected colors from session state
+    # Define styles based on type
     styles = {
         "road": {
-            "background": st.session_state.styling['bg_color_road'],
-            "border": f"2px solid {st.session_state.styling['border_color_road']}",
-            "title_color": st.session_state.styling['title_color_road']
+            "background": "#fff3cd",
+            "border": "2px solid #ffeaa7",
+            "title_color": "#2c3e50"
         },
         "poi": {
-            "background": st.session_state.styling['bg_color_poi'],
-            "border": f"2px solid {st.session_state.styling['border_color_poi']}",
-            "title_color": st.session_state.styling['title_color_poi']
+            "background": "#e8f4fd",
+            "border": "2px solid #b8daff", 
+            "title_color": "#2c3e50"
         },
         "default": {
-            "background": st.session_state.styling['bg_color_default'],
-            "border": f"2px solid {st.session_state.styling['border_color_default']}",
-            "title_color": st.session_state.styling['title_color_default']
+            "background": "#f8f9fa",
+            "border": "2px solid #dee2e6",
+            "title_color": "#495057"
         }
     }
     
     style = styles.get(style_type, styles["default"])
     
-    # Build text decoration from session state
-    font_weight = "bold" if st.session_state.styling['bold_fields'] else "normal"
-    font_style = "italic" if st.session_state.styling['italic_fields'] else "normal"
-    text_decoration_line = "underline" if st.session_state.styling['underline_fields'] else "none"
-    
     # Build fields HTML
     fields_html = ""
     for field_name, field_value in fields.items():
-        if field_value:
-            # Capitalize first letter of field name
-            capitalized_field_name = field_name[0].upper() + field_name[1:] if field_name else ""
-            
+        if field_value:  # Only add if value exists
             fields_html += f'''
 <div style="display: flex; align-items: start; margin-bottom: 8px;">
-<div style="min-width: 160px; font-weight: {font_weight}; font-style: {font_style}; text-decoration: {text_decoration_line}; color: {style['title_color']};">{capitalized_field_name}</div>
+<div style="min-width: 160px; font-weight: bold; color: {style['title_color']};">{field_name}:</div>
 <div style="flex: 1;">{field_value}</div>
 </div>
 '''
     
     html_template = f'''
 <div style="font-family: Arial, sans-serif; background: {style['background']}; border: {style['border']}; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+<div style="font-size: 18px; font-weight: bold; color: {style['title_color']}; margin-bottom: 12px; border-bottom: 1px solid {style['border'].split(' ')[2]}; padding-bottom: 5px;">{title}</div>
 <div style="display: grid; gap: 8px;">
 {fields_html}
 </div>
@@ -162,12 +88,10 @@ def create_universal_html(fields, style_type="default"):
 '''
     return html_template.strip()
 
-# ... (keep all the existing functions exactly as they were: extract_field_name_value, process_road_data, process_poi_data, process_generic_data, get_expander_title)
-
 def extract_field_name_value(part):
     """
     Extract field name and value from a part.
-    Removes colon from field name and adds ": " to the beginning of value.
+    Removes 'Info 1', 'Info 2' etc and uses text before colon as field name.
     """
     # Remove "Info X:" patterns
     cleaned_part = re.sub(r'^Info\s*\d+\s*:\s*', '', part.strip())
@@ -175,8 +99,8 @@ def extract_field_name_value(part):
     # Split by first colon to separate field name and value
     if ':' in cleaned_part:
         field_name, field_value = cleaned_part.split(':', 1)
-        field_name = field_name.strip()  # No colon here
-        field_value = f": {field_value.strip()}"  # Add colon with space to value
+        field_name = field_name.strip()
+        field_value = field_value.strip()
     else:
         # If no colon, use generic field name
         field_name = "Informasi"
@@ -188,16 +112,17 @@ def process_road_data(text):
     """Process road data with pipe separator support"""
     parts = [part.strip() for part in text.split('|')]
     
+    # Extract data using both regex and pipe parsing
     fields = {}
     
     # If we have pipe-separated parts, use them
     if len(parts) > 1:
-        for i, part in enumerate(parts[1:], 1):
+        for i, part in enumerate(parts[1:], 1):  # Skip first part (title)
             field_name, field_value = extract_field_name_value(part)
-            if field_value:
+            if field_value:  # Only add if value exists
                 fields[field_name] = field_value
     
-    # Fallback to regex parsing
+    # Fallback to regex parsing if pipe parsing didn't work well
     if not fields:
         nama_match = re.search(r'nama jalan\s*\(\s*(jalur[^)]+)', text, re.IGNORECASE)
         jenis_match = re.search(r'Jenis jalan\s*\(\s*([^)]+)', text, re.IGNORECASE)
@@ -206,20 +131,19 @@ def process_road_data(text):
         kondisi_match = re.search(r'Kondisi Jalan\s*\(\s*([^)]+)', text, re.IGNORECASE)
         keterangan_match = re.search(r'Keterangan Tambahan\s*:([^<]*)', text, re.IGNORECASE)
         
-        if nama_match:
-            fields['Nama Jalan'] = f": {nama_match.group(1).strip()}"
-        if jenis_match:
-            fields['Jenis Jalan'] = f": {jenis_match.group(1).strip()}"
-        if lebar_match:
-            fields['Lebar Jalan'] = f": {lebar_match.group(1).strip()}"
-        if karakter_match:
-            fields['Karakter Jalan'] = f": {karakter_match.group(1).strip()}"
-        if kondisi_match:
-            fields['Kondisi Jalan'] = f": {kondisi_match.group(1).strip()}"
-        if keterangan_match:
-            fields['Keterangan'] = f": {keterangan_match.group(1).strip()}"
+        fields = {
+            'Nama Jalan': nama_match.group(1).strip() if nama_match else "jalur",
+            'Jenis Jalan': jenis_match.group(1).strip() if jenis_match else "",
+            'Lebar Jalan': lebar_match.group(1).strip() if lebar_match else "",
+            'Karakter Jalan': karakter_match.group(1).strip() if karakter_match else "",
+            'Kondisi Jalan': kondisi_match.group(1).strip() if kondisi_match else "",
+            'Keterangan': keterangan_match.group(1).strip() if keterangan_match else "jalan evakuasi"
+        }
     
-    return create_universal_html(fields, "road")
+    # Clean up fields - remove empty ones
+    fields = {k: v for k, v in fields.items() if v and v.strip()}
+    
+    return create_universal_html("🛣️ Deskripsi Jalan", fields, "road")
 
 def process_poi_data(text):
     """Process POI data with pipe separator support"""
@@ -229,9 +153,9 @@ def process_poi_data(text):
     
     # If we have pipe-separated parts, use them
     if len(parts) > 1:
-        for i, part in enumerate(parts[1:], 1):
+        for i, part in enumerate(parts[1:], 1):  # Skip first part (title)
             field_name, field_value = extract_field_name_value(part)
-            if field_value:
+            if field_value:  # Only add if value exists
                 fields[field_name] = field_value
     
     # Fallback to regex parsing
@@ -242,66 +166,45 @@ def process_poi_data(text):
         fasilitas_match = re.search(r'Fasilitas Pendukung\s*\(([^)]+)', text, re.IGNORECASE)
         keterangan_match = re.search(r'Keterangan Tambahan:\s*([^\n]+)', text, re.IGNORECASE)
         
-        if nama_match:
-            fields['Nama Fasilitas'] = f": {nama_match.group(1).strip()}"
-        if jenis_match:
-            fields['Jenis'] = f": {jenis_match.group(1).strip()}"
-        if daya_match:
-            fields['Daya Tampung'] = f": {daya_match.group(1).strip()}"
-        if fasilitas_match:
-            fields['Fasilitas'] = f": {fasilitas_match.group(1).strip()}"
-        if keterangan_match:
-            fields['Keterangan'] = f": {keterangan_match.group(1).strip()}"
+        fields = {
+            'Nama Fasilitas': nama_match.group(1).strip() if nama_match else "",
+            'Jenis': jenis_match.group(1).strip() if jenis_match else "Fasilitas Umum",
+            'Daya Tampung': daya_match.group(1).strip() if daya_match else "",
+            'Fasilitas': fasilitas_match.group(1).strip() if fasilitas_match else "",
+            'Keterangan': keterangan_match.group(1).strip() if keterangan_match else "tempat pengungsian"
+        }
     
-    return create_universal_html(fields, "poi")
+    # Clean up fields
+    fields = {k: v for k, v in fields.items() if v and v.strip()}
+    
+    return create_universal_html("🏢 Fasilitas Umum", fields, "poi")
 
 def process_generic_data(text):
     """Process any generic data with pipe separator"""
     parts = [part.strip() for part in text.split('|')]
     
-    fields = {}
-    
     if len(parts) == 1:
+        # Single part - just return as is
         field_name, field_value = extract_field_name_value(parts[0])
         fields = {field_name: field_value}
+        title = "📌 Informasi"
     else:
-        # Skip the first part (title) for processing, but use it for expander title
+        # Multiple parts - use first as title, rest as fields
+        title = f"📌 {parts[0]}"
+        fields = {}
         for i, part in enumerate(parts[1:], 1):
             field_name, field_value = extract_field_name_value(part)
-            if field_value:
+            if field_value:  # Only add if value exists
                 fields[field_name] = field_value
     
-    return create_universal_html(fields, "default")
-
-def get_expander_title(text):
-    """Get title for expander from the first part of the text - ambil text SETELAH colon"""
-    parts = [part.strip() for part in text.split('|')]
-    if parts:
-        first_part = parts[0]
-        # Extract text AFTER colon untuk judul
-        if ':' in first_part:
-            title = first_part.split(':', 1)[1].strip()  # Ambil bagian setelah colon
-        else:
-            title = first_part
-        
-        # Capitalize first letter
-        title = title[0].upper() + title[1:] if title else "Entry"
-        
-        # Add appropriate emoji based on content
-        if '*deskripsi jalan*' in text.lower() or 'nama jalan' in text.lower():
-            return f"🛣️ {title}"
-        elif 'nama po' in text.lower():
-            return f"🏢 {title}"
-        else:
-            return f"📌 {title}"
-    
-    return "📌 Entry"
+    return create_universal_html(title, fields, "default")
 
 # Process button
 if st.button("🚀 Process Data", type="primary"):
     if not input_data.strip():
         st.warning("Please paste some data first!")
     else:
+        # Process data
         lines = input_data.strip().split('\n')
         results = []
         stats = {"roads": 0, "pois": 0, "other": 0}
@@ -314,23 +217,21 @@ if st.button("🚀 Process Data", type="primary"):
             
             if '*deskripsi jalan*' in line_lower or 'deskripsi jalan' in line_lower:
                 html = process_road_data(line)
-                expander_title = get_expander_title(line)
-                results.append(("🛣️ ROAD", expander_title, html))
+                results.append(("🛣️ ROAD", html))
                 stats["roads"] += 1
             elif 'nama po' in line_lower:
                 html = process_poi_data(line)
-                expander_title = get_expander_title(line)
-                results.append(("🏢 POI", expander_title, html))
+                results.append(("🏢 POI", html))
                 stats["pois"] += 1
             else:
                 html = process_generic_data(line)
-                expander_title = get_expander_title(line)
-                results.append(("📌 OTHER", expander_title, html))
+                results.append(("📌 OTHER", html))
                 stats["other"] += 1
 
         # Display results
         st.success(f"✅ Processed {len(results)} entries (Roads: {stats['roads']}, POIs: {stats['pois']}, Other: {stats['other']})")
         
+        # Add page break styling
         st.markdown("""
         <style>
         .page-break {
@@ -340,10 +241,31 @@ if st.button("🚀 Process Data", type="primary"):
         </style>
         """, unsafe_allow_html=True)
         
-        for i, (entry_type, expander_title, result) in enumerate(results, 1):
-            with st.expander(f"{expander_title} - Entry {i}"):
+        for i, (entry_type, result) in enumerate(results, 1):
+            with st.expander(f"{entry_type} - Entry {i}"):
                 st.components.v1.html(result, height=400)
                 st.code(result, language='html')
                 
+                # Add page break after each entry in code view
                 if i < len(results):
                     st.markdown('<div class="page-break"></div>', unsafe_allow_html=True)
+
+# Example data
+with st.expander("📝 Example Input Format"):
+    st.markdown("""
+    **Using Pipe Separators (Recommended):**
+    ```
+    SDN 2 Tiying tali | Desa: Tiying tali | Banjar: Banjar dinas tiyingtali kaler | Jenis: Gedung sekolah | Daya Tampung: +-400 | Fasilitas: listrik, sumber air, tollet | Bangunan: permanent | Luas Area: 15 are | Keterangan: di rencanakan sebagai tempat pengungsian
+    ```
+    
+    **Or with your original format:**
+    ```
+    *Deskripsi jalan* | Jalan Evakuasi Utama | Jenis jalan (jalan aspal) | Lebar Jalan (8 meter) | Karakter jalan (lurus) | Kondisi Jalan (baik) | Keterangan Tambahan: jalan utama evakuasi
+    Nama POI | SDN Contoh Sekolah | Jenis Fasum (sekolah) | Daya Tampung (200 orang) | Fasilitas Pendukung (lapangan, ruang kelas) | Keterangan Tambahan: tempat pengungsian sementara
+    ```
+    
+    **The app will automatically:**
+    - Remove "Info 1", "Info 2", etc. labels
+    - Make field names before colons bold
+    - Create clean, professional HTML output
+    """)
