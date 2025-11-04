@@ -3,6 +3,23 @@ import re
 
 st.set_page_config(page_title="uMap HTML Generator", page_icon="🗺️", layout="wide")
 
+# Initialize session state for styling options
+if 'styling' not in st.session_state:
+    st.session_state.styling = {
+        'bg_color_road': "#fff3cd",
+        'bg_color_poi': "#e8f4fd", 
+        'bg_color_default': "#f8f9fa",
+        'border_color_road': "#ffeaa7",
+        'border_color_poi': "#b8daff",
+        'border_color_default': "#dee2e6",
+        'title_color_road': "#2c3e50",
+        'title_color_poi': "#2c3e50",
+        'title_color_default': "#495057",
+        'bold_fields': True,
+        'italic_fields': False,
+        'underline_fields': False
+    }
+
 st.title("🗺️ uMap HTML Generator")
 st.subheader("Transform your road & POI data into beautiful uMap descriptions")
 
@@ -10,15 +27,77 @@ st.subheader("Transform your road & POI data into beautiful uMap descriptions")
 with st.expander("📋 How to use"):
     st.markdown("""
     1. **Paste your raw data** in the text area below (use | as separator)
-    2. **Click 'Process Data'** 
-    3. **Copy the HTML output** for each entry
-    4. **Paste into uMap** description fields
+    2. **Customize styling** using the options in the sidebar
+    3. **Click 'Process Data'** 
+    4. **Copy the HTML output** for each entry
+    5. **Paste into uMap** description fields
     
     The app automatically detects:
     - 🛣️ **Road descriptions** (starts with '*Deskripsi jalan*')
     - 🏢 **POI/Facilities** (starts with 'Nama PO')
     - 🔄 **Other entries** (kept as-is)
     """)
+
+# Sidebar for styling options
+st.sidebar.header("🎨 Custom Styling")
+
+# Background color selection
+st.sidebar.subheader("Background Colors")
+bg_color_road = st.sidebar.color_picker("Road Background", st.session_state.styling['bg_color_road'], key="road_bg")
+bg_color_poi = st.sidebar.color_picker("POI Background", st.session_state.styling['bg_color_poi'], key="poi_bg")
+bg_color_default = st.sidebar.color_picker("Default Background", st.session_state.styling['bg_color_default'], key="default_bg")
+
+# Border color selection
+st.sidebar.subheader("Border Colors")
+border_color_road = st.sidebar.color_picker("Road Border", st.session_state.styling['border_color_road'], key="road_border")
+border_color_poi = st.sidebar.color_picker("POI Border", st.session_state.styling['border_color_poi'], key="poi_border")
+border_color_default = st.sidebar.color_picker("Default Border", st.session_state.styling['border_color_default'], key="default_border")
+
+# Text formatting options
+st.sidebar.subheader("Text Formatting")
+bold_fields = st.sidebar.checkbox("Bold Field Names", value=st.session_state.styling['bold_fields'], key="bold")
+italic_fields = st.sidebar.checkbox("Italic Field Names", value=st.session_state.styling['italic_fields'], key="italic")
+underline_fields = st.sidebar.checkbox("Underline Field Names", value=st.session_state.styling['underline_fields'], key="underline")
+
+# Title color selection
+st.sidebar.subheader("Title Colors")
+title_color_road = st.sidebar.color_picker("Road Titles", st.session_state.styling['title_color_road'], key="road_title")
+title_color_poi = st.sidebar.color_picker("POI Titles", st.session_state.styling['title_color_poi'], key="poi_title")
+title_color_default = st.sidebar.color_picker("Default Titles", st.session_state.styling['title_color_default'], key="default_title")
+
+# Update session state with current values
+st.session_state.styling.update({
+    'bg_color_road': bg_color_road,
+    'bg_color_poi': bg_color_poi,
+    'bg_color_default': bg_color_default,
+    'border_color_road': border_color_road,
+    'border_color_poi': border_color_poi,
+    'border_color_default': border_color_default,
+    'title_color_road': title_color_road,
+    'title_color_poi': title_color_poi,
+    'title_color_default': title_color_default,
+    'bold_fields': bold_fields,
+    'italic_fields': italic_fields,
+    'underline_fields': underline_fields
+})
+
+# Reset to defaults
+if st.sidebar.button("Reset to Defaults"):
+    st.session_state.styling = {
+        'bg_color_road': "#fff3cd",
+        'bg_color_poi': "#e8f4fd", 
+        'bg_color_default': "#f8f9fa",
+        'border_color_road': "#ffeaa7",
+        'border_color_poi': "#b8daff",
+        'border_color_default': "#dee2e6",
+        'title_color_road': "#2c3e50",
+        'title_color_poi': "#2c3e50",
+        'title_color_default': "#495057",
+        'bold_fields': True,
+        'italic_fields': False,
+        'underline_fields': False
+    }
+    st.rerun()
 
 # Input area
 input_data = st.text_area(
@@ -34,25 +113,31 @@ def create_universal_html(fields, style_type="default"):
     Tanpa title di dalam HTML
     """
     
+    # Apply user-selected colors from session state
     styles = {
         "road": {
-            "background": "#fff3cd",
-            "border": "2px solid #ffeaa7",
-            "title_color": "#2c3e50"
+            "background": st.session_state.styling['bg_color_road'],
+            "border": f"2px solid {st.session_state.styling['border_color_road']}",
+            "title_color": st.session_state.styling['title_color_road']
         },
         "poi": {
-            "background": "#e8f4fd",
-            "border": "2px solid #b8daff", 
-            "title_color": "#2c3e50"
+            "background": st.session_state.styling['bg_color_poi'],
+            "border": f"2px solid {st.session_state.styling['border_color_poi']}",
+            "title_color": st.session_state.styling['title_color_poi']
         },
         "default": {
-            "background": "#f8f9fa",
-            "border": "2px solid #dee2e6",
-            "title_color": "#495057"
+            "background": st.session_state.styling['bg_color_default'],
+            "border": f"2px solid {st.session_state.styling['border_color_default']}",
+            "title_color": st.session_state.styling['title_color_default']
         }
     }
     
     style = styles.get(style_type, styles["default"])
+    
+    # Build text decoration from session state
+    font_weight = "bold" if st.session_state.styling['bold_fields'] else "normal"
+    font_style = "italic" if st.session_state.styling['italic_fields'] else "normal"
+    text_decoration_line = "underline" if st.session_state.styling['underline_fields'] else "none"
     
     # Build fields HTML
     fields_html = ""
@@ -63,7 +148,7 @@ def create_universal_html(fields, style_type="default"):
             
             fields_html += f'''
 <div style="display: flex; align-items: start; margin-bottom: 8px;">
-<div style="min-width: 160px; font-weight: bold; color: {style['title_color']};">{capitalized_field_name}</div>
+<div style="min-width: 160px; font-weight: {font_weight}; font-style: {font_style}; text-decoration: {text_decoration_line}; color: {style['title_color']};">{capitalized_field_name}</div>
 <div style="flex: 1;">{field_value}</div>
 </div>
 '''
@@ -76,6 +161,8 @@ def create_universal_html(fields, style_type="default"):
 </div>
 '''
     return html_template.strip()
+
+# ... (keep all the existing functions exactly as they were: extract_field_name_value, process_road_data, process_poi_data, process_generic_data, get_expander_title)
 
 def extract_field_name_value(part):
     """
