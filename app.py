@@ -19,13 +19,18 @@ with st.expander("📋 How to use"):
     - 🏢 **POI/Facilities** (starts with 'Nama PO')
     - 🏫 **Schools & Facilities** (HTML format)
     - 🔄 **Other entries** (processed with universal styling)
+    
+    **Separators supported:**
+    - Pipe `|` (recommended for structured data)
+    - Natural text format
+    - Mixed formats
     """)
 
 # Input area
 input_data = st.text_area(
-    "Paste your entire list here:",
+    "Paste your entire list here (pipe | separator supported):",
     height=300,
-    placeholder="Paste your data here...\n\nExamples:\n\n*Deskripsi jalan* 1. nama jalan (jalur contoh) 2. Jenis jalan (jalan aspal) 3. Lebar Jalan (5m)...\nNama PO: Contoh Facility | Desa: Contoh | Banjar: Contoh...\n<div style=\"...\">SDN 1 Contoh</div>"
+    placeholder="Paste your data here...\n\nExamples with pipe separator:\n\n*Deskripsi jalan* | 1. nama jalan (jalur contoh) | 2. Jenis jalan (jalan aspal) | 3. Lebar Jalan (5m)...\nNama PO: Contoh Facility | Desa: Contoh | Banjar: Contoh | Daya Tampung: 100\n\nOr natural text:\n*Deskripsi jalan* 1. nama jalan (jalur contoh) 2. Jenis jalan (jalan aspal)..."
 )
 
 # Universal styling function dengan format yang Anda inginkan
@@ -76,47 +81,71 @@ def create_universal_html(fields, style_type="default"):
 '''
     return html_template.strip()
 
-def process_road_data(text):
-    """Process road data dengan format baru"""
-    # Extract data menggunakan regex untuk format yang lebih fleksibel
+def extract_fields_from_pipe(text):
+    """Extract fields from pipe-separated text"""
     fields = {}
+    parts = [part.strip() for part in text.split('|') if part.strip()]
     
-    # Pattern untuk format: 1. nama jalan (value) 2. Jenis jalan (value) ...
-    patterns = {
-        'Nama Jalan': r'1\.\s*nama jalan\s*\(\s*(jalur[^)]+)',
-        'Jenis Jalan': r'2\.\s*Jenis jalan\s*\(\s*([^)]+)',
-        'Lebar Jalan': r'3\.\s*Lebar Jalan\s*\(\s*([^)]+)', 
-        'Karakter Jalan': r'4\.\s*karakter jalan\s*\(\s*([^)]+)',
-        'Kondisi Jalan': r'5\.\s*Kondisi Jalan\s*\(\s*([^)]+)',
-        'Keterangan Tambahan': r'6\.\s*Keterangan Tambahan\s*:\s*([^<]*)'
-    }
+    for part in parts:
+        # Coba extract field: value pattern
+        if ':' in part:
+            field_parts = part.split(':', 1)
+            field_name = field_parts[0].strip()
+            field_value = field_parts[1].strip()
+            fields[field_name] = standardize_indonesian(field_value)
+        else:
+            # Handle numbered format: 1. nama jalan (value)
+            numbered_match = re.match(r'(\d+)\.\s*(.+?)\s*\(([^)]+)\)', part)
+            if numbered_match:
+                number = numbered_match.group(1)
+                field_type = numbered_match.group(2).strip()
+                value = numbered_match.group(3).strip()
+                
+                # Map numbers to field names
+                field_map = {
+                    '1': 'Nama Jalan',
+                    '2': 'Jenis Jalan', 
+                    '3': 'Lebar Jalan',
+                    '4': 'Karakter Jalan',
+                    '5': 'Kondisi Jalan',
+                    '6': 'Keterangan Tambahan'
+                }
+                
+                field_name = field_map.get(number, field_type)
+                fields[field_name] = standardize_indonesian(value)
+            else:
+                # Simple text - use as information
+                if 'Informasi' not in fields:
+                    fields['Informasi'] = standardize_indonesian(part)
+                else:
+                    fields['Informasi'] += f", {standardize_indonesian(part)}"
     
-    for field_name, pattern in patterns.items():
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            value = match.group(1).strip()
-            # Clean up value - remove "jalur" prefix if present
-            if field_name == 'Nama Jalan' and value.startswith('jalur'):
-                value = value.replace('jalur', '').strip()
-            # Standardize bahasa Indonesia
-            value = standardize_indonesian(value)
-            fields[field_name] = value
-    
-    # Jika tidak ada match dengan pola berangka, coba pattern alternatif
-    if not fields:
-        alt_patterns = {
-            'Nama Jalan': r'nama jalan\s*\(\s*(jalur[^)]+)',
-            'Jenis Jalan': r'Jenis jalan\s*\(\s*([^)]+)',
-            'Lebar Jalan': r'Lebar Jalan\s*\(\s*([^)]+)',
-            'Karakter Jalan': r'karakter jalan\s*\(\s*([^)]+)', 
-            'Kondisi Jalan': r'Kondisi Jalan\s*\(\s*([^)]+)',
-            'Keterangan Tambahan': r'Keterangan Tambahan\s*:\s*([^<]*)'
+    return fields
+
+def process_road_data(text):
+    """Process road data dengan support untuk pipe separator"""
+    # Cek jika menggunakan pipe separator
+    if '|' in text:
+        fields = extract_fields_from_pipe(text)
+    else:
+        # Gunakan regex parsing untuk natural text
+        fields = {}
+        
+        # Pattern untuk format: 1. nama jalan (value) 2. Jenis jalan (value) ...
+        patterns = {
+            'Nama Jalan': r'1\.\s*nama jalan\s*\(\s*(jalur[^)]+)',
+            'Jenis Jalan': r'2\.\s*Jenis jalan\s*\(\s*([^)]+)',
+            'Lebar Jalan': r'3\.\s*Lebar Jalan\s*\(\s*([^)]+)', 
+            'Karakter Jalan': r'4\.\s*karakter jalan\s*\(\s*([^)]+)',
+            'Kondisi Jalan': r'5\.\s*Kondisi Jalan\s*\(\s*([^)]+)',
+            'Keterangan Tambahan': r'6\.\s*Keterangan Tambahan\s*:\s*([^<]*)'
         }
         
-        for field_name, pattern in alt_patterns.items():
+        for field_name, pattern in patterns.items():
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 value = match.group(1).strip()
+                # Clean up value - remove "jalur" prefix if present
                 if field_name == 'Nama Jalan' and value.startswith('jalur'):
                     value = value.replace('jalur', '').strip()
                 value = standardize_indonesian(value)
@@ -128,29 +157,34 @@ def process_road_data(text):
     return create_universal_html(fields, "road")
 
 def process_poi_data(text):
-    """Process POI data dengan format baru"""
-    fields = {}
-    
-    # Pattern untuk format: Field: value
-    patterns = {
-        'Nama PO': r'Nama PO:?\s*([^\n|]+)',
-        'Desa': r'Desa:?\s*([^\n|]+)',
-        'Banjar': r'Banjar:?\s*([^\n|]+)',
-        'Jenis Fasum': r'Jenis Fasum:?\s*\(?\s*([^)|]+)',
-        'Daya Tampung': r'Daya Tampung:?\s*([^\n|]+)',
-        'Fasilitas Pendukung': r'Fasilitas Pendukung\s*\(?\s*([^)|]+)',
-        'Kontak person': r'Kontak person:?\s*([^\n|]+)',
-        'Jenis Bangunan': r'Jenis Bangunan:?\s*([^\n|]+)',
-        'Luas Area Terbuka': r'Luas Area Terbuka:?\s*([^\n|]+)',
-        'Keterangan Tambahan': r'Keterangan Tambahan:?\s*([^\n|]+)'
-    }
-    
-    for field_name, pattern in patterns.items():
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            value = match.group(1).strip()
-            value = standardize_indonesian(value)
-            fields[field_name] = value
+    """Process POI data dengan support untuk pipe separator"""
+    # Cek jika menggunakan pipe separator
+    if '|' in text:
+        fields = extract_fields_from_pipe(text)
+    else:
+        # Gunakan regex parsing untuk natural text
+        fields = {}
+        
+        # Pattern untuk format: Field: value
+        patterns = {
+            'Nama PO': r'Nama PO:?\s*([^\n|]+)',
+            'Desa': r'Desa:?\s*([^\n|]+)',
+            'Banjar': r'Banjar:?\s*([^\n|]+)',
+            'Jenis Fasum': r'Jenis Fasum:?\s*\(?\s*([^)|]+)',
+            'Daya Tampung': r'Daya Tampung:?\s*([^\n|]+)',
+            'Fasilitas Pendukung': r'Fasilitas Pendukung\s*\(?\s*([^)|]+)',
+            'Kontak person': r'Kontak person:?\s*([^\n|]+)',
+            'Jenis Bangunan': r'Jenis Bangunan:?\s*([^\n|]+)',
+            'Luas Area Terbuka': r'Luas Area Terbuka:?\s*([^\n|]+)',
+            'Keterangan Tambahan': r'Keterangan Tambahan:?\s*([^\n|]+)'
+        }
+        
+        for field_name, pattern in patterns.items():
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                value = match.group(1).strip()
+                value = standardize_indonesian(value)
+                fields[field_name] = value
     
     # Clean up fields
     fields = {k: v for k, v in fields.items() if v and v.strip()}
@@ -170,40 +204,41 @@ def standardize_indonesian(text):
         r'\b(\d)\s*m\b': r'\1 m',  # Standardize meter format
         r'\b(\d)\s*are\b': r'\1 are',  # Standardize are format
         r'\+\-\s*': '±',  # Standardize plus-minus
+        r'^\s*jalur\s*': '',  # Remove leading "jalur"
     }
     
     for pattern, replacement in replacements.items():
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
     
-    return text
+    return text.strip()
 
 def process_html_data(text):
     """Process data yang sudah dalam format HTML - return as is"""
     return text.strip()
 
 def process_generic_data(text):
-    """Process any generic data"""
-    # Coba extract fields dengan pattern field: value
-    fields = {}
-    
-    # Split by common separators
-    parts = re.split(r'[|:]', text)
-    
-    if len(parts) > 1:
-        current_field = "Informasi"
-        for i, part in enumerate(parts):
-            if i == 0:
-                # Bagian pertama biasanya judul/field name
-                current_field = part.strip()
-            else:
-                # Bagian selanjutnya adalah value
-                if part.strip():
-                    fields[current_field] = part.strip()
-                    # Reset untuk field berikutnya
-                    current_field = "Informasi"
+    """Process any generic data dengan support untuk pipe separator"""
+    # Cek jika menggunakan pipe separator
+    if '|' in text:
+        fields = extract_fields_from_pipe(text)
     else:
-        # Single part - treat as simple information
-        fields['Keterangan'] = text.strip()
+        # Gunakan metode sebelumnya untuk natural text
+        fields = {}
+        
+        # Coba extract fields dengan pattern field: value
+        parts = re.split(r'[|:]', text)
+        
+        if len(parts) > 1:
+            current_field = "Informasi"
+            for i, part in enumerate(parts):
+                if i == 0:
+                    current_field = part.strip()
+                else:
+                    if part.strip():
+                        fields[current_field] = part.strip()
+                        current_field = "Informasi"
+        else:
+            fields['Keterangan'] = text.strip()
     
     # Clean and standardize
     cleaned_fields = {}
@@ -257,21 +292,26 @@ if st.button("🚀 Process Data", type="primary"):
                 st.components.v1.html(result, height=400, scrolling=True)
                 st.code(result, language='html')
 
-# Example data
-with st.expander("📝 Example Input Format"):
+# Example data dengan pipe separator
+with st.expander("📝 Example Input Format with Pipe Separator"):
     st.markdown("""
-    **Road Data Format:**
+    **Road Data with Pipe Separator:**
     ```
-    *Deskripsi jalan* 1. nama jalan ( jalur Ababi-tiing tali) 2. Jenis jalan (Jalan Kabupaten) 3. Lebar Jalan (4m) 4. karakter jalan ( aspal hotmix) 5. Kondisi Jalan ( bisa di lalu sepeda motor, roda 4 dan truk) 6. Keterangan Tambahan :pertigaan jalan nasinonal- Kabupaten,ababi menuju tiing tali
-    ```
-    
-    **POI Data Format:**
-    ```
-    Nama PO: Tempat penyadnyan Br. dinas Kelakah Desa:pidpid Banjar:Br. Dinas kelakah Jenis Fasum: ( lapangan) Daya Tampung: +-600 Fasilitas Pendukung (Listrik, sumber air, toilet) Kontak person:082341652819 Jenis Bangunan:permanen Luas Area Terbuka: 20 are Keterangan Tambahan: di rencanakan di pakai sebagai titik kumpul
+    *Deskripsi jalan* | 1. nama jalan (Jalur Ababi-Tiing Tali) | 2. Jenis jalan (Jalan Kabupaten) | 3. Lebar Jalan (4m) | 4. karakter jalan (Aspal Hotmix) | 5. Kondisi Jalan (Dapat dilalui sepeda motor, roda 4 dan truk) | 6. Keterangan Tambahan: Pertigaan jalan nasional-kabupaten, Ababi menuju Tiing Tali
     ```
     
-    **HTML Data (will be preserved as-is):**
+    **POI Data with Pipe Separator:**
     ```
-    <div style="font-family: Arial, sans-serif; background: #f8f9fa; border: 2px solid #dee2e6; border-radius: 8px; padding: 15px;"> ... </div>
+    Nama PO: Tempat penyadnyan Br. dinas Kelakah | Desa: Pidpid | Banjar: Br. Dinas kelakah | Jenis Fasum: Lapangan | Daya Tampung: ±600 | Fasilitas Pendukung: Listrik, sumber air, toilet | Kontak person: 082341652819 | Jenis Bangunan: Permanen | Luas Area Terbuka: 20 are | Keterangan Tambahan: Direncanakan dipakai sebagai titik kumpul
+    ```
+    
+    **Simple Key-Value with Pipe:**
+    ```
+    Nama Fasilitas: SDN 2 Tiying Tali | Desa: Tiying Tali | Banjar: Banjar dinas Tiyingtali kaler | Jenis: Gedung sekolah | Daya Tampung: ±400 | Fasilitas: listrik, sumber air, toilet | Bangunan: permanen | Luas Area: 15 are | Keterangan: Direncanakan sebagai tempat pengungsian
+    ```
+    
+    **Mixed Format (also supported):**
+    ```
+    *Deskripsi jalan* 1. nama jalan (jalur contoh) 2. Jenis jalan (jalan aspal) 3. Lebar Jalan (5m)...
     ```
     """)
