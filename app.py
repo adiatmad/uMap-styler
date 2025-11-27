@@ -1,179 +1,141 @@
-""")
+import streamlit as st
+import pandas as pd
+import io
+import re
 
-# Option 1: Use data from previous steps
-st.subheader("📁 Pilih Sumber Data")
+st.header("Step C – Styled HTML Generator (robust parser)")
 
-data_source = st.radio(
-    "Pilih sumber data:",
-    ["Gunakan data dari Step C", "Upload CSV baru"],
-    index=0
-)
+uploaded = st.file_uploader("Upload CSV", type=["csv"])
+if uploaded:
+    # read CSV with pandas (let pandas guess delimiter inside cells)
+    try:
+        df = pd.read_csv(uploaded)
+    except Exception as e:
+        st.error(f"Error reading CSV: {e}")
+        st.stop()
 
-current_df = None
+    st.write("Preview (first 5 rows):")
+    st.dataframe(df.head())
 
-if data_source == "Gunakan data dari Step C":
-    if 'df_joined_c' in st.session_state and st.session_state.df_joined_c is not None:
-        current_df = st.session_state.df_joined_c
-        st.success(f"✅ Menggunakan data dari Step C ({len(current_df)} records)")
-    else:
-        st.warning("⚠️ Tidak ada data dari Step C. Silakan upload CSV baru.")
-        data_source = "Upload CSV baru"
+    # choose column to transform
+    column = st.selectbox("Choose the column containing the pipe-separated text:", df.columns)
 
-if data_source == "Upload CSV baru" or current_df is None:
-    uploaded_csv = st.file_uploader("Upload CSV file untuk styling", type=["csv"], key="html_styling_csv")
-    if uploaded_csv:
-        current_df = read_csv_with_fallback(uploaded_csv)
-        if current_df is not None:
-            st.success(f"✅ CSV berhasil dimuat ({len(current_df)} records)")
+    # separator option (in case user wants different char)
+    sep_input = st.text_input("Separator (regex allowed). Default is pipe `|`:", value="|")
+    try:
+        sep_pattern = rf"\s*{sep_input}\s*" if sep_input == "|" else rf"\s*{re.escape(sep_input)}\s*"
+    except Exception:
+        sep_pattern = r"\s*\|\s*"
 
-# Process styling if we have data
-if current_df is not None:
-    st.subheader("🎯 Pilih Kolom untuk Styling")
-    
-    # Show dataframe preview
-    st.write("**Preview Data:**")
-    st.dataframe(current_df.head(5))
-    
-    # Get text columns
-    text_columns = [col for col in current_df.columns 
-                   if col not in ['_feature_id', 'geometry_json', 'geometry'] 
-                   and current_df[col].dtype == 'object']
-    
-    if text_columns:
-        selected_columns = st.multiselect(
-            "Pilih kolom yang berisi data pipe-separated:",
-            options=text_columns,
-            help="Pilih kolom yang berisi data dengan format: Field1: Value1 | Field2: Value2 | ..."
+    # option: how to handle segments without colon
+    handle_no_colon = st.selectbox("If a segment has no ':' — what to do?",
+                                   ["Treat as single info row (label=Informasi)", "Skip segment"])
+
+    generate_btn = st.button("Generate Styled HTML")
+
+    def parse_to_html(raw_text, sep_regex, no_colon_mode="informasi"):
+        """
+        raw_text: original cell text
+        sep_regex: regex pattern to split segments (string)
+        no_colon_mode: "informasi" or "skip"
+        """
+        if pd.isna(raw_text) or str(raw_text).strip() == "":
+            return ""
+
+        s = str(raw_text).strip()
+
+        # split using regex for robust trimming around separators
+        parts = re.split(sep_regex, s)
+
+        rows_html = []
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+
+            # sometimes there are stray leading/trailing separators or double separators
+            # try to split by first colon:
+            if ":" in part:
+                key, val = part.split(":", 1)
+                key = key.strip()
+                val = val.strip()
+                if key == "":
+                    key = "Informasi"
+                if val == "":
+                    val = "-"
+                rows_html.append(f'''
+  <div style="display: flex; align-items: start; margin-bottom: 8px;">
+    <div style="min-width: 160px; font-weight: bold; color: #2c3e50;">{st.html_escape(key)}</div>
+    <div style="flex: 1;">: {st.html_escape(val)}</div>
+  </div>
+                ''')
+            else:
+                # no colon present
+                if no_colon_mode == "informasi":
+                    # keep as Informasi
+                    rows_html.append(f'''
+  <div style="display: flex; align-items: start; margin-bottom: 8px;">
+    <div style="min-width: 160px; font-weight: bold; color: #2c3e50;">Informasi</div>
+    <div style="flex: 1;">: {st.html_escape(part)}</div>
+  </div>
+                    ''')
+                else:
+                    # skip this segment
+                    continue
+
+        if not rows_html:
+            return ""
+
+        card = f'''
+<div style="font-family: Arial, sans-serif; background: #e8f4fd;
+            border: 2px solid #b8daff; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+  <div style="display: grid; gap: 8px;">
+    {''.join(rows_html)}
+  </div>
+</div>
+        '''
+        return card
+
+    # Helper to safely preview some rendered HTML (use components if many)
+    import streamlit.components.v1 as components
+
+    if generate_btn:
+        # apply parser to the selected column for all rows
+        st.info("Processing...")
+
+        # compute styled_html for every row
+        df = df.copy()
+        df["styled_html"] = df[column].apply(lambda x: parse_to_html(x, sep_pattern,
+                                                                    no_colon_mode="informasi" if handle_no_colon.startswith("Treat") else "skip"))
+
+        st.success("Done — preview below (first 5 styled entries).")
+
+        # show previews for first 5 non-empty styled_html
+        preview_count = 0
+        for idx, row in df.iterrows():
+            html = row["styled_html"]
+            if html and str(html).strip():
+                st.markdown(f"**Row {idx} preview:**")
+                components.html(html, height=260, scrolling=True)
+                preview_count += 1
+            if preview_count >= 5:
+                break
+
+        # prepare CSV for download
+        buffer = io.StringIO()
+        df.to_csv(buffer, index=False)
+        csv_bytes = buffer.getvalue().encode("utf-8")
+
+        st.download_button(
+            label="⬇ Download CSV with styled_html column",
+            data=csv_bytes,
+            file_name="styled_output.csv",
+            mime="text/csv"
         )
-        
-        if selected_columns:
-            st.write(f"Selected {len(selected_columns)} columns for styling")
-            
-            # Preview before and after
-            st.subheader("👁️ Preview Sebelum & Sesudah Styling")
-            
-            preview_row = st.slider("Pilih baris untuk preview:", 0, min(5, len(current_df)-1), 0)
-            
-            for col in selected_columns[:2]:  # Show first 2 columns
-                st.write(f"**Kolom:** `{col}`")
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    original_value = current_df.iloc[preview_row][col]
-                    st.text_area(
-                        "Data Asli:", 
-                        value=original_value, 
-                        height=100, 
-                        key=f"orig_{col}_{preview_row}"
-                    )
-                
-                with col2:
-                    html_output = process_pipe_separated_data(current_df.iloc[preview_row][col])
-                    if html_output:
-                        st.components.v1.html(html_output, height=200, scrolling=True)
-                        with st.expander("Lihat HTML Code"):
-                            st.code(html_output, language='html')
-                    else:
-                        st.info("Tidak ada data untuk di-styling")
-            
-            # Bulk processing
-            if st.button("🚀 APPLY BULK HTML STYLING", type="primary"):
-                with st.spinner(f"Memproses {len(current_df)} records..."):
-                    df_styled = bulk_apply_html_styling(current_df, selected_columns)
-                    
-                    if df_styled is not None:
-                        st.session_state.df_styled_final = df_styled
-                        st.success(f"✅ Berhasil memproses {len(current_df)} records!")
-                        
-                        # Show results
-                        st.subheader("📊 Hasil Styling")
-                        
-                        # Show original vs styled comparison
-                        comparison_cols = []
-                        for col in selected_columns[:3]:  # Show first 3 for comparison
-                            comparison_cols.extend([col, f"{col}_styled"])
-                        
-                        if comparison_cols:
-                            st.dataframe(df_styled[comparison_cols].head(5))
-                        
-                        # Download options
-                        st.subheader("💾 Download Hasil")
-                        
-                        col1, col2, col3 = st.columns(3)
-                        
-                        with col1:
-                            # Full CSV with all columns
-                            csv_full = io.StringIO()
-                            df_styled.to_csv(csv_full, index=False, encoding='utf-8')
-                            st.download_button(
-                                "📥 Download Full CSV", 
-                                csv_full.getvalue().encode("utf-8"), 
-                                "styled_data_full.csv", 
-                                "text/csv",
-                                help="Semua kolom termasuk yang sudah di-styling"
-                            )
-                        
-                        with col2:
-                            # Only styled columns
-                            styled_cols = [col for col in df_styled.columns if col.endswith('_styled')]
-                            original_ids = [col for col in ['_feature_id', 'id'] if col in df_styled.columns]
-                            
-                            if styled_cols:
-                                df_only_styled = df_styled[original_ids + styled_cols]
-                                csv_styled = io.StringIO()
-                                df_only_styled.to_csv(csv_styled, index=False, encoding='utf-8')
-                                st.download_button(
-                                    "🎨 Download Styled Columns Only", 
-                                    csv_styled.getvalue().encode("utf-8"), 
-                                    "only_styled_columns.csv", 
-                                    "text/csv",
-                                    help="Hanya kolom yang sudah di-styling"
-                                )
-                        
-                        with col3:
-                            # GeoJSON export if applicable
-                            if '_feature_id' in df_styled.columns and 'geometry_json' in df_styled.columns:
-                                geojson_output = dataframe_to_geojson(df_styled)
-                                geo_str = json.dumps(geojson_output, indent=2, ensure_ascii=False)
-                                st.download_button(
-                                    "🗺️ Download as GeoJSON", 
-                                    geo_str.encode("utf-8"), 
-                                    "styled_data.geojson", 
-                                    "application/json"
-                                )
-                        
-                        # Show statistics
-                        st.subheader("📈 Statistics")
-                        total_cells = len(current_df) * len(selected_columns)
-                        styled_cols_count = len([col for col in df_styled.columns if col.endswith('_styled')])
-                        st.write(f"- Total records: {len(current_df)}")
-                        st.write(f"- Columns styled: {styled_cols_count}")
-                        st.write(f"- Total cells processed: {total_cells}")
-                        
-    else:
-        st.warning("⚠️ Tidak ditemukan kolom teks untuk di-styling")
 
-# Standalone HTML converter for quick testing
-st.markdown("---")
-st.header("🔧 Quick HTML Converter")
+        st.write("If the output still looks identical to input, check the note below.")
+        st.caption("Tips: make sure the selected column is the right one, and that the cell actually contains `|` separators. If your CSV contains quoted fields with `|` it should still work — pandas preserves quoted content.")
 
-st.write("Coba konversi data pipe-separated ke HTML:")
-
-test_input = st.text_area(
-    "Masukkan data pipe-separated:",
-    value="Nama Fasilitas: Kantor Perbekel Desa Pidpid | Kecamatan: Abang | Desa: Pidpid | Banjar: Pidpid Kelod | Jenis Fasum: Wantilan | Daya Tampung: 300 orang | Fasilitas Pendukung: toilet, listrik, sumber air, dapur umum | Kontak Person: | Jenis Bangunan: Permanen | Luas Area Terbuka: 10x15 meter persegi | Jaringan Komunikasi: internet | Keterangan Tambahan: dekat dengan jalan kabupaten",
-    height=150
-)
-
-if st.button("🔄 Convert to HTML"):
-    if test_input.strip():
-        html_result = process_pipe_separated_data(test_input)
-        st.components.v1.html(html_result, height=400, scrolling=True)
-        with st.expander("Lihat HTML Code"):
-            st.code(html_result, language='html')
-    else:
-        st.warning("Masukkan data terlebih dahulu")
-
-st.markdown("---")
-st.write("**✨ Complete GeoJSON ↔ CSV Editor with Bulk HTML Styling**")
+    # quick debug: show raw cell example for selected col
+    st.markdown("### Debug: sample raw values from selected column")
+    st.write(df[column].head(10))
