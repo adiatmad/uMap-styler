@@ -751,7 +751,7 @@ def normalize_review_text(value):
     """Conservative whitespace-only normalization; preserve spelling and casing."""
     if not isinstance(value, str):
         return value
-    return re.sub(r"\\s+", " ", value).strip()
+    return re.sub(r"\s+", " ", value).strip()
 
 
 def inspect_text_quality(properties):
