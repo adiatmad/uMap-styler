@@ -1018,14 +1018,14 @@ def apply_approved_spellcheck_finding(records, rid, field, original, suggestion)
 
 def merge_project_vocabulary(existing_text, additions):
     """Merge reviewer-approved vocabulary terms without duplicates."""
-    existing = [word.strip() for word in re.split(r"[\\n,;]+", str(existing_text or "")) if word.strip()]
+    existing = [word.strip() for word in re.split(r"[\n,;]+", str(existing_text or "")) if word.strip()]
     seen = {word.casefold() for word in existing}
     for raw_word in additions or []:
         word = str(raw_word).strip()
         if word and word.casefold() not in seen:
             existing.append(word)
             seen.add(word.casefold())
-    return "\\n".join(existing)
+    return "\n".join(existing)
 
 
 def _add_spellcheck_words_to_vocabulary(words):
