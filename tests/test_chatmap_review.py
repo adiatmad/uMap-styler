@@ -169,6 +169,15 @@ class TextQualityReviewTests(unittest.TestCase):
         self.assertTrue(any(set(f["values"]) == {"sampah plastik", "sampah plstik"} and f["kind"] == "possible_typo" for f in findings))
         self.assertTrue(all("similarity" in f and "canonical" in f for f in findings))
 
+
+    def test_inconsistency_scan_ignores_rejected_and_conflicted_records(self):
+        records = {
+            "1": {"reviewed_properties": {"category": "sampah plastik"}, "status": "New", "conflict": False},
+            "2": {"reviewed_properties": {"category": "sampah plstik"}, "status": "Rejected", "conflict": False},
+            "3": {"reviewed_properties": {"category": "sampah plstik"}, "status": "New", "conflict": True},
+        }
+        self.assertEqual(self.cluster(records, threshold=0.82), [])
+
     def test_bulk_replacement_requires_explicit_mapping_and_demotes_verified(self):
         records = {
             "1": {"source": {"properties": {"category": "sampah plstik"}}, "reviewed_properties": {"category": "sampah plstik"}, "status": "Verified", "conflict": False},
