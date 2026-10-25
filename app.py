@@ -653,6 +653,18 @@ def import_chatmap_geojson(geojson, existing_records=None):
         seen_in_import.add(rid)
         fingerprint = _fingerprint(source)
         if rid not in records:
+            # ChatMap exports may omit stable feature IDs. Match an otherwise-unmatched
+            # report at the same geometry so changed text/media is flagged as a conflict
+            # rather than imported as a second report. Ambiguous shared locations are
+            # deliberately not auto-matched.
+            geometry_matches = [
+                existing_id for existing_id, existing in records.items()
+                if existing.get("source", {}).get("geometry") == source.get("geometry")
+                and not existing.get("conflict")
+            ]
+            if len(geometry_matches) == 1:
+                rid = geometry_matches[0]
+        if rid not in records:
             records[rid] = {
                 "id": rid, "source": source, "source_fingerprint": fingerprint,
                 "reviewed_properties": copy.deepcopy(props), "status": "New",
