@@ -105,6 +105,7 @@ class ChatMapReviewTests(unittest.TestCase):
 
     def test_accept_incoming_requires_conflict_and_demotes_to_review(self):
         ledger, _ = self.importer(collection(feature("before", fid="r1")))
+        ledger["r1"]["status"] = "Verified"
         ledger, counts = self.importer(collection(feature("after", fid="r1")), ledger)
         self.assertEqual(counts["changed"], 1)
         self.assertTrue(ledger["r1"]["conflict"])
