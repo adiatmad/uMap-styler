@@ -20,8 +20,8 @@ Extend the existing single-file Streamlit app so coordinators can detect likely 
 6. Raw source snapshots are never changed by quality checks or bulk replacements.
 7. Existing conflict and verified-only export gates remain intact.
 8. Tests cover conservative normalization, non-mutating scan, formatting/typo clustering, approved bulk replacement, status demotion, conflict/rejected skips, invalid inputs, local spelling suggestions, vocabulary safeguards, source/geometry preservation, and stale approval rejection.
-10. The Streamlit app starts without runtime exceptions and defaults to ChatMap review; switching to legacy tools also renders without runtime exceptions.
 9. CI compiles `app.py` and runs all unit tests. Changes are proposed through a PR, not committed directly to `main`.
+10. The Streamlit app starts without runtime exceptions and defaults to ChatMap review; switching to legacy tools also renders without runtime exceptions.
 
 ## Test plan
 - Add failing unit tests first for each pure helper.
