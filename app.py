@@ -929,7 +929,7 @@ def spellcheck_text(value, id_dictionary, english_checker, custom_words=None):
     if not isinstance(value, str) or not value.strip():
         return []
     safe_words = {str(word).strip().casefold() for word in (custom_words or []) if str(word).strip()}
-    token_pattern = re.compile(r"(?<![\\w])([^\\W\\d_][^\\W\\d_'-]*)(?![\\w])", re.UNICODE)
+    token_pattern = re.compile(r"(?<![\w])([^\W\d_][^\W\d_'-]*)(?![\w])", re.UNICODE)
     findings = []
     for match in token_pattern.finditer(value):
         token = match.group(1)
@@ -1080,7 +1080,7 @@ if active_workspace == "ChatMap review":
                 help="Add place names, local terms, abbreviations, and valid regional words to reduce false positives."
             )
             st.session_state.chatmap_project_vocabulary_text = vocabulary_text
-            custom_words = [word.strip() for word in re.split(r"[\\n,;]+", vocabulary_text) if word.strip()]
+            custom_words = [word.strip() for word in re.split(r"[\n,;]+", vocabulary_text) if word.strip()]
             scan_spelling = st.button("Scan Indonesian + English spelling", key="chatmap_spellcheck_scan", type="primary")
             clear_spelling = st.button("Clear spelling results", key="chatmap_spellcheck_clear")
             if clear_spelling:
@@ -1128,7 +1128,8 @@ if active_workspace == "ChatMap review":
                             if st.button("Add flagged words to vocabulary", key=f"vocab_spell_{row_index}_{_fingerprint([rid, row['field'], row['original']])[:8]}"):
                                 existing = {word.casefold() for word in custom_words}
                                 updated = custom_words + [word for word in row["tokens"] if word.casefold() not in existing]
-                                st.session_state.chatmap_project_vocabulary_text = "\\n".join(updated)
+                                st.session_state.chatmap_project_vocabulary_text = "\n".join(updated)
+                                st.session_state.chatmap_project_vocabulary_editor = st.session_state.chatmap_project_vocabulary_text
                                 st.session_state.chatmap_spellcheck_findings = [item for item in spell_rows if not (item["report_id"] == rid and item["field"] == row["field"] and item["original"] == row["original"])]
                                 st.info("Added to this session's vocabulary. Re-run the scan to check remaining text.")
                                 st.rerun()

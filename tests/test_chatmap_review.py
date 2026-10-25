@@ -40,7 +40,7 @@ def load_real_spellcheck_engines():
     from pathlib import Path
     from spylls.hunspell import Dictionary
     from spellchecker import SpellChecker
-    prefix = Path(__file__).resolve().parents[1] / "dictionaries" / "id_ID"
+    prefix = APP_PATH.parent / "dictionaries" / "id_ID"
     return Dictionary.from_files(str(prefix)), SpellChecker(language="en")
 
 def load_html_renderer():
