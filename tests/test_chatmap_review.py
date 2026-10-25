@@ -88,6 +88,12 @@ class ChatMapReviewTests(unittest.TestCase):
         self.assertEqual(counts["invalid"], 1)
         self.assertEqual(ledger, {})
 
+    def test_malformed_geometry_is_skipped(self):
+        bad = {"type": "Feature", "geometry": {"type": "NotAGeometry", "coordinates": []}, "properties": {}}
+        ledger, counts = self.importer(collection(bad))
+        self.assertEqual(counts["invalid"], 1)
+        self.assertEqual(ledger, {})
+
     def test_ledger_roundtrip_and_invalid_status_rejected(self):
         ledger, _ = self.importer(collection(feature()))
         packed = NAMESPACE["working_ledger_geojson"](ledger)
