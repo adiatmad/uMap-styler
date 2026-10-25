@@ -784,7 +784,7 @@ def find_text_inconsistencies(records, threshold=0.88):
     values_by_field = defaultdict(list)
     for record in (records or {}).values():
         properties = record.get("reviewed_properties") or {}
-        if record.get("conflict") or not isinstance(properties, dict):
+        if record.get("conflict") or record.get("status") == "Rejected" or not isinstance(properties, dict):
             continue
         for field, value in properties.items():
             if isinstance(value, str) and normalize_review_text(value):
@@ -997,7 +997,7 @@ if records:
         else:
             st.info("Run the scan to inspect whitespace issues and likely text variants.")
 
-    with st.expander("C. Review and correct one report", expanded=True):
+    with st.expander("D. Review and correct one report", expanded=True):
         ids = list(records.keys())
         labels = {rid: f"{rid} — {records[rid].get('status', 'New')}" + (" ⚠ conflict" if records[rid].get("conflict") else "") for rid in ids}
         selected_id = st.selectbox("Report", options=ids, format_func=lambda rid: labels[rid], key="selected_chatmap_report")
