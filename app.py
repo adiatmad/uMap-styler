@@ -174,11 +174,13 @@ def create_universal_html(fields, style_type="default"):
     
     fields_html = ""
     for field_name, field_value in fields.items():
-        if field_value and field_value.strip():
+        if field_value and str(field_value).strip():
+            safe_name = html_lib.escape(str(field_name), quote=True)
+            safe_value = html_lib.escape(str(field_value), quote=True)
             fields_html += f'''
   <div style="display: flex; align-items: start; margin-bottom: 8px;">
-  <div style="min-width: 160px; font-weight: bold; color: #2c3e50;">{field_name}</div>
-  <div style="flex: 1;">: {field_value}</div>
+  <div style="min-width: 160px; font-weight: bold; color: #2c3e50;">{safe_name}</div>
+  <div style="flex: 1;">: {safe_value}</div>
   </div>
 '''
     
@@ -662,7 +664,7 @@ def import_chatmap_geojson(geojson, existing_records=None):
                 if existing.get("source", {}).get("geometry") == source.get("geometry")
                 and not existing.get("conflict")
             ]
-            if len(geometry_matches) == 1:
+            if source.get("geometry") is not None and len(geometry_matches) == 1:
                 rid = geometry_matches[0]
         if rid not in records:
             records[rid] = {
