@@ -49,6 +49,16 @@ The **ChatMap → Review → Publish to uMap** section supports a deliberate, hu
 4. Download **verified-only GeoJSON**. If this is the first publication, open [HOT uMap](https://umap.hotosm.org/), sign in, create and save a map, then import the GeoJSON in the map editor. Inspect the features and extent before saving/sharing.
 5. Download the **review ledger backup** after changes and keep it with the project. Upload that ledger in a later session to continue reviewing.
 
+### Text-quality and consistency review
+
+The ChatMap review panel includes a local text-quality scan for whitespace issues and same-field value variants. It can suggest likely spelling variants by comparing strings already present in the imported records; similarity is a clue, not proof that two labels mean the same thing. This is designed for mixed Indonesian/English text and avoids sending reports to an external language service.
+
+- Scanning is read-only and does not change source properties.
+- Whitespace cleanup changes only the review copy after you explicitly approve it.
+- Cluster replacements require an explicit canonical value and button click. Only exact matching values in non-conflicted, non-rejected review records are changed.
+- Changed records are demoted to `Needs correction`, including previously verified records, so they must be reviewed again.
+- Original source properties remain unchanged. No suggestion is auto-applied or auto-published.
+
 ### Safety and synchronization limits
 
 - Only records marked `Verified` and without an unresolved source conflict are included in the publishable GeoJSON.
