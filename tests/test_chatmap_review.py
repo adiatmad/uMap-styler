@@ -17,7 +17,7 @@ HELPERS = {
     "_source_snapshot", "_review_id", "import_chatmap_geojson",
     "promote_incoming_source", "reviewed_geojson", "working_ledger_geojson",
     "load_working_ledger", "normalize_review_text", "inspect_text_quality",
-    "find_text_inconsistencies", "apply_approved_text_replacements",
+    "find_text_inconsistencies", "apply_approved_text_replacements", "apply_approved_whitespace_cleanup",
 }
 NAMESPACE = {
     "json": json, "hashlib": hashlib, "copy": copy,
@@ -183,6 +183,22 @@ class TextQualityReviewTests(unittest.TestCase):
         self.assertEqual(records["3"]["reviewed_properties"]["category"], "sampah plstik")
         self.assertEqual(records["4"]["status"], "Rejected")
         self.assertEqual(records["1"]["source"]["properties"]["category"], "sampah plstik")
+
+
+    def test_approved_whitespace_cleanup_is_explicit_and_review_gated(self):
+        records = {
+            "1": {"source": {"properties": {"description": "  Sampah   plastik "}}, "reviewed_properties": {"description": "  Sampah   plastik "}, "status": "Verified", "conflict": False},
+            "2": {"source": {"properties": {"description": "  Sampah   plastik "}}, "reviewed_properties": {"description": "  Sampah   plastik "}, "status": "New", "conflict": False},
+            "3": {"source": {"properties": {"description": "  Sampah   plastik "}}, "reviewed_properties": {"description": "  Sampah   plastik "}, "status": "Verified", "conflict": True},
+            "4": {"source": {"properties": {"description": "  Sampah   plastik "}}, "reviewed_properties": {"description": "  Sampah   plastik "}, "status": "Rejected", "conflict": False},
+        }
+        changed = NAMESPACE["apply_approved_whitespace_cleanup"](records)
+        self.assertEqual(changed, 2)
+        self.assertEqual(records["1"]["reviewed_properties"]["description"], "Sampah plastik")
+        self.assertEqual(records["1"]["status"], "Needs correction")
+        self.assertEqual(records["3"]["reviewed_properties"]["description"], "  Sampah   plastik ")
+        self.assertEqual(records["4"]["reviewed_properties"]["description"], "  Sampah   plastik ")
+        self.assertEqual(records["1"]["source"]["properties"]["description"], "  Sampah   plastik ")
 
     def test_bulk_replacement_rejects_invalid_inputs(self):
         records = {"1": {"reviewed_properties": {"category": "old"}, "status": "New", "conflict": False}}
