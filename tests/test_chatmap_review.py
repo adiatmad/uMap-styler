@@ -217,5 +217,26 @@ class TextQualityReviewTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.apply(records, "category", {"old": ""})
 
+
+class WorkspaceNavigationTests(unittest.TestCase):
+    def test_chatmap_review_is_the_default_workspace(self):
+        source = APP_PATH.read_text(encoding="utf-8")
+        self.assertIn('options=["ChatMap review", "GeoJSON / CSV / HTML tools"]', source)
+        self.assertIn('index=0,', source)
+        self.assertIn('if active_workspace == "ChatMap review":', source)
+
+    def test_legacy_tools_remain_available_in_their_own_workspace(self):
+        source = APP_PATH.read_text(encoding="utf-8")
+        self.assertIn('if active_workspace == "GeoJSON / CSV / HTML tools":', source)
+        self.assertIn("STEP D: BULK HTML STYLING", source)
+        self.assertIn("Quick HTML Converter", source)
+        self.assertIn("Step C — Stand-alone Join Attributes", source)
+
+    def test_ui_copy_preserves_manual_verified_only_publishing_rule(self):
+        source = APP_PATH.read_text(encoding="utf-8")
+        self.assertIn("Only verified, conflict-free records are included", source)
+        self.assertIn('record.get("status") != "Verified" or record.get("conflict")', source)
+        self.assertIn("does not automatically publish to HOT uMap", source)
+
 if __name__ == "__main__":
     unittest.main()
