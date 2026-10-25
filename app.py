@@ -644,7 +644,19 @@ def import_chatmap_geojson(geojson, existing_records=None):
         if not isinstance(raw, dict) or raw.get("type") != "Feature":
             counts["invalid"] += 1
             continue
-        if "geometry" not in raw or not isinstance(raw.get("properties", {}) or {}, dict):
+        geometry = raw.get("geometry")
+        valid_geometry_types = {
+            "Point", "MultiPoint", "LineString", "MultiLineString",
+            "Polygon", "MultiPolygon", "GeometryCollection"
+        }
+        if (
+            "geometry" not in raw
+            or (geometry is not None and (
+                not isinstance(geometry, dict)
+                or geometry.get("type") not in valid_geometry_types
+            ))
+            or not isinstance(raw.get("properties", {}) or {}, dict)
+        ):
             counts["invalid"] += 1
             continue
         feature = copy.deepcopy(raw)
