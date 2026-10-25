@@ -932,9 +932,9 @@ def spellcheck_text(value, id_dictionary, english_checker, custom_words=None):
     token_pattern = re.compile(r"(?<![\w])([^\W\d_][^\W\d_'-]*)(?![\w])", re.UNICODE)
     # URLs, email addresses, and common structured reference IDs are not prose.
     protected_pattern = re.compile(
-        r"(?:https?://|www\\.)[^\\s<>]+"
-        r"|\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b"
-        r"|\\b(?:id|uuid|ref|code|ticket|task)[\\s:_#-]*[A-Z0-9][A-Z0-9_-]{2,}\\b",
+        r"(?:https?://|www\.)[^\s<>]+"
+        r"|\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b"
+        r"|\b(?:id|uuid|ref|code|ticket|task)[\s:_#-]*[A-Z0-9][A-Z0-9_-]{2,}\b",
         re.IGNORECASE,
     )
     protected_spans = [match.span() for match in protected_pattern.finditer(value)]
