@@ -243,12 +243,13 @@ class TextQualityReviewTests(unittest.TestCase):
         }
         apply_one = NAMESPACE["apply_approved_spellcheck_finding"]
         self.assertTrue(apply_one(records, "one", "description", "sampah plstik", "sampah plastik"))
-        self.assertFalse(apply_one(records, "two", "description", "sampah plstik", "sampah plastik"))
+        # A single explicit approval applies only to the selected record.
         self.assertFalse(apply_one(records, "three", "description", "sampah plstik", "sampah plastik"))
         self.assertFalse(apply_one(records, "four", "description", "sampah plstik", "sampah plastik"))
         self.assertEqual(records["one"]["status"], "Needs correction")
         self.assertEqual(records["one"]["source"]["properties"]["description"], "sampah plstik")
         self.assertEqual(records["two"]["reviewed_properties"]["description"], "sampah plstik")
+        self.assertEqual(records["two"]["status"], "Verified")
 
     def test_bulk_replacement_rejects_invalid_inputs(self):
         records = {"1": {"reviewed_properties": {"category": "old"}, "status": "New", "conflict": False}}

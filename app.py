@@ -946,7 +946,15 @@ def spellcheck_text(value, id_dictionary, english_checker, custom_words=None):
             known_en = False
         if known_id or known_en:
             continue
-        candidates = []
+        # Small domain lexicon fallback covers common waste-mapping terms even
+        # when a Hunspell suggestion list is empty. This is a suggestion source,
+        # never an automatic correction rule.
+        candidates = [
+            "plastik", "sungai", "sampah", "limbah", "organik", "anorganik",
+            "pembuangan", "tumpukan", "bersih", "kotor", "terbuka", "tercemar",
+            "plastic", "river", "waste", "dumping", "rubbish", "garbage",
+            "collection", "recycling", "community", "location"
+        ]
         try:
             candidates.extend(id_dictionary.suggest(token)[:5])
         except Exception:
