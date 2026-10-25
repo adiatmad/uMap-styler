@@ -11,8 +11,38 @@ import re
 import html as html_lib
 from typing import List, Dict, Any
 
-st.set_page_config(page_title="GeoJSON ↔ CSV Bulk Editor", layout="wide")
-st.title("GeoJSON ↔ CSV Bulk Editor — Complete Workflow")
+st.set_page_config(page_title="uMap Styler | ChatMap Review", page_icon="🗺️", layout="wide")
+st.markdown(
+    """
+    <style>
+    .block-container {padding-top: 1.7rem; padding-bottom: 3rem; max-width: 1500px;}
+    [data-testid="stSidebar"] {border-right: 1px solid rgba(128,128,128,.22);}
+    [data-testid="stMetric"] {background: rgba(128,128,128,.07); padding: .8rem 1rem; border-radius: .75rem;}
+    div[data-testid="stButton"] > button[kind="primary"] {border-radius: .55rem; font-weight: 600;}
+    div[data-testid="stDownloadButton"] > button {border-radius: .55rem;}
+    div[data-testid="stFileUploader"] {border-radius: .65rem;}
+    .umap-subtitle {font-size: 1.02rem; opacity: .86; max-width: 900px;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+st.title("🗺️ uMap Styler")
+st.markdown('<p class="umap-subtitle">Prepare community mapping data, review corrections, and export only records approved for publication.</p>', unsafe_allow_html=True)
+
+with st.sidebar:
+    st.markdown("## Workspace")
+    active_workspace = st.radio(
+        "Choose a workflow",
+        options=["ChatMap review", "GeoJSON / CSV / HTML tools"],
+        index=0,
+        help="ChatMap review is the primary workflow. Utility tools remain available separately.",
+        label_visibility="collapsed",
+    )
+    st.divider()
+    st.caption("**Publishing rule**")
+    st.caption("Only verified, conflict-free records are included in the ChatMap export.")
+    st.caption("Publishing to uMap remains a manual step; nothing is auto-published.")
+
 
 # --------------------------
 # --- IMPROVED Helper functions -----
@@ -272,327 +302,330 @@ def bulk_apply_html_styling(df, columns_to_style):
     return df_styled
 
 # --------------------------
-# --- STEP 0: Combine GeoJSON
-# --------------------------
-st.header("🔄 Step 0 — Combine Multiple GeoJSON Files")
-multi_geojson_files = st.file_uploader(
-    "Upload multiple GeoJSON files", 
-    type=["geojson", "json"], 
-    key="multi_geo",
-    accept_multiple_files=True
-)
-if multi_geojson_files and len(multi_geojson_files) > 1:
-    geojson_objects = []
-    valid_files = True
-    for uploaded_file in multi_geojson_files:
-        try:
-            geojson_obj = json.load(uploaded_file)
-            if geojson_obj.get("type") == "FeatureCollection":
-                geojson_objects.append(geojson_obj)
-            else:
-                st.error(f"❌ File {uploaded_file.name} bukan FeatureCollection")
+if active_workspace == "GeoJSON / CSV / HTML tools":
+    # --- STEP 0: Combine GeoJSON
+    # --------------------------
+    st.header("🔄 Step 0 — Combine Multiple GeoJSON Files")
+    multi_geojson_files = st.file_uploader(
+        "Upload multiple GeoJSON files", 
+        type=["geojson", "json"], 
+        key="multi_geo",
+        accept_multiple_files=True
+    )
+    if multi_geojson_files and len(multi_geojson_files) > 1:
+        geojson_objects = []
+        valid_files = True
+        for uploaded_file in multi_geojson_files:
+            try:
+                geojson_obj = json.load(uploaded_file)
+                if geojson_obj.get("type") == "FeatureCollection":
+                    geojson_objects.append(geojson_obj)
+                else:
+                    st.error(f"❌ File {uploaded_file.name} bukan FeatureCollection")
+                    valid_files = False
+            except Exception as e:
+                st.error(f"❌ File {uploaded_file.name} error: {e}")
                 valid_files = False
-        except Exception as e:
-            st.error(f"❌ File {uploaded_file.name} error: {e}")
-            valid_files = False
-    if valid_files and geojson_objects:
-        combined_geojson = combine_geojson_files(geojson_objects)
-        st.success(f"✅ Combined {len(geojson_objects)} files ({len(combined_geojson['features'])} features)")
-        st.session_state.combined_geojson = combined_geojson
-
-# --------------------------
-# --- STEP A: GeoJSON → CSV
-# --------------------------
-st.header("📥 Step A — Convert GeoJSON → CSV")
-col1, col2 = st.columns([1,1])
-with col1:
-    uploaded_geojson = st.file_uploader("Upload GeoJSON", type=["geojson", "json"], key="upload_geo")
-    paste_geo_text = st.text_area("Atau paste GeoJSON di sini (optional)", height=120)
-with col2:
-    st.write("Upload GeoJSON asli → CSV untuk bulk edit")
-
-geojson_obj = None
-if 'combined_geojson' in st.session_state:
-    geojson_obj = st.session_state.combined_geojson
-elif uploaded_geojson is not None:
-    try: 
-        geojson_obj = json.load(uploaded_geojson)
-        st.success("✅ GeoJSON berhasil dimuat")
-    except Exception as e: 
-        st.error(f"❌ Gagal parse GeoJSON: {e}")
-elif paste_geo_text.strip() != "":
-    try: 
-        geojson_obj = json.loads(paste_geo_text)
-        st.success("✅ GeoJSON dari teks berhasil dimuat")
-    except Exception as e: 
-        st.error(f"❌ Gagal parse GeoJSON dari teks: {e}")
-
-if geojson_obj:
-    df_out = geojson_to_dataframe(geojson_obj)
-    if not df_out.empty:
-        st.dataframe(df_out.head(10))
-        csv_buffer = io.StringIO()
-        df_out.to_csv(csv_buffer, index=False, encoding='utf-8')
-        st.download_button("💾 Download CSV untuk diedit", csv_buffer.getvalue().encode("utf-8"), "export_properties.csv", "text/csv")
-    else:
-        st.warning("⚠️ GeoJSON tidak mengandung features atau kosong")
-
-# --------------------------
-# --- STEP B: CSV → Merge → GeoJSON
-# --------------------------
-st.markdown("---")
-st.header("📤 Step B — Upload CSV hasil edit → Merge → Download GeoJSON")
-edited_csv = st.file_uploader("Upload CSV hasil edit (Step A)", type=["csv"], key="upload_csv")
-if edited_csv:
-    df_edited = read_csv_with_fallback(edited_csv)
-    if df_edited is not None:
-        df_edited = df_edited.replace(['','NaN','NaT','None'], None)
-        geo_out = dataframe_to_geojson(df_edited)
-        st.download_button("💾 Download merged GeoJSON", json.dumps(geo_out, indent=2, ensure_ascii=False).encode("utf-8"), "merged.geojson", "application/json")
-
-# --------------------------
-# --- STEP C: IMPROVED Stand-alone Join Attributes
-# --------------------------
-st.markdown("---")
-st.header("🧩 Step C — Stand-alone Join Attributes")
-
-col1, col2 = st.columns(2)
-with col1:
-    st.subheader("File Utama")
-    main_file = st.file_uploader("Upload MAIN file", type=["csv","xlsx","geojson","json"], key="main_file")
-with col2:
-    st.subheader("File Tambahan") 
-    add_file = st.file_uploader("Upload ADDITIONAL file", type=["csv","xlsx","geojson","json"], key="add_file")
-
-join_key_options = ["id", "_feature_id", "name", "ID", "Id"]
-join_key_c = st.selectbox("Pilih kolom untuk join:", options=join_key_options, index=0, key="join_key_c")
-custom_join_key = st.text_input("Atau masukkan nama kolom manual:", key="custom_join_key")
-final_join_key = custom_join_key if custom_join_key else join_key_c
-
-if 'df_joined_c' not in st.session_state:
-    st.session_state.df_joined_c = None
-
-if st.button("🔗 Join Attributes (Step C)", type="primary", key="join_button_improved"):
-    if not main_file or not add_file:
-        st.error("❌ Both files must be uploaded")
-    else:
-        try:
-            main_df = None
-            if main_file.name.lower().endswith(".csv"):
-                main_df = read_csv_with_fallback(main_file)
-            elif main_file.name.lower().endswith(".xlsx"):
-                main_df = read_xlsx_with_fallback(main_file)
-            else:
-                main_geo = json.load(main_file)
-                main_df = geojson_to_dataframe(main_geo)
-
-            add_df = None
-            if add_file.name.lower().endswith(".csv"):
-                add_df = read_csv_with_fallback(add_file)
-            elif add_file.name.lower().endswith(".xlsx"):
-                add_df = read_xlsx_with_fallback(add_file)
-            else:
-                add_geo = json.load(add_file)
-                add_df = geojson_to_dataframe(add_geo)
-
-            if main_df is None or main_df.empty:
-                st.error("❌ File utama tidak dapat dibaca atau kosong")
-            elif add_df is None or add_df.empty:
-                st.error("❌ File tambahan tidak dapat dibaca atau kosong")
-            else:
-                st.write(f"✅ File utama: {len(main_df)} records")
-                st.write(f"✅ File tambahan: {len(add_df)} records")
-                
-                df_joined_c = join_attributes(main_df, add_df, final_join_key)
-                
-                if df_joined_c is not None:
-                    st.session_state.df_joined_c = df_joined_c
-                    st.subheader("📋 Hasil Join")
-                    st.dataframe(df_joined_c.head(10))
+        if valid_files and geojson_objects:
+            combined_geojson = combine_geojson_files(geojson_objects)
+            st.success(f"✅ Combined {len(geojson_objects)} files ({len(combined_geojson['features'])} features)")
+            st.session_state.combined_geojson = combined_geojson
+    
+    # --------------------------
+    # --- STEP A: GeoJSON → CSV
+    # --------------------------
+    st.header("📥 Step A — Convert GeoJSON → CSV")
+    col1, col2 = st.columns([1,1])
+    with col1:
+        uploaded_geojson = st.file_uploader("Upload GeoJSON", type=["geojson", "json"], key="upload_geo")
+        paste_geo_text = st.text_area("Atau paste GeoJSON di sini (optional)", height=120)
+    with col2:
+        st.write("Upload GeoJSON asli → CSV untuk bulk edit")
+    
+    geojson_obj = None
+    if 'combined_geojson' in st.session_state:
+        geojson_obj = st.session_state.combined_geojson
+    elif uploaded_geojson is not None:
+        try: 
+            geojson_obj = json.load(uploaded_geojson)
+            st.success("✅ GeoJSON berhasil dimuat")
+        except Exception as e: 
+            st.error(f"❌ Gagal parse GeoJSON: {e}")
+    elif paste_geo_text.strip() != "":
+        try: 
+            geojson_obj = json.loads(paste_geo_text)
+            st.success("✅ GeoJSON dari teks berhasil dimuat")
+        except Exception as e: 
+            st.error(f"❌ Gagal parse GeoJSON dari teks: {e}")
+    
+    if geojson_obj:
+        df_out = geojson_to_dataframe(geojson_obj)
+        if not df_out.empty:
+            st.dataframe(df_out.head(10))
+            csv_buffer = io.StringIO()
+            df_out.to_csv(csv_buffer, index=False, encoding='utf-8')
+            st.download_button("💾 Download CSV untuk diedit", csv_buffer.getvalue().encode("utf-8"), "export_properties.csv", "text/csv")
+        else:
+            st.warning("⚠️ GeoJSON tidak mengandung features atau kosong")
+    
+    # --------------------------
+    # --- STEP B: CSV → Merge → GeoJSON
+    # --------------------------
+    st.markdown("---")
+    st.header("📤 Step B — Upload CSV hasil edit → Merge → Download GeoJSON")
+    edited_csv = st.file_uploader("Upload CSV hasil edit (Step A)", type=["csv"], key="upload_csv")
+    if edited_csv:
+        df_edited = read_csv_with_fallback(edited_csv)
+        if df_edited is not None:
+            df_edited = df_edited.replace(['','NaN','NaT','None'], None)
+            geo_out = dataframe_to_geojson(df_edited)
+            st.download_button("💾 Download merged GeoJSON", json.dumps(geo_out, indent=2, ensure_ascii=False).encode("utf-8"), "merged.geojson", "application/json")
+    
+    # --------------------------
+    # --- STEP C: IMPROVED Stand-alone Join Attributes
+    # --------------------------
+    st.markdown("---")
+    st.header("🧩 Step C — Stand-alone Join Attributes")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("File Utama")
+        main_file = st.file_uploader("Upload MAIN file", type=["csv","xlsx","geojson","json"], key="main_file")
+    with col2:
+        st.subheader("File Tambahan") 
+        add_file = st.file_uploader("Upload ADDITIONAL file", type=["csv","xlsx","geojson","json"], key="add_file")
+    
+    join_key_options = ["id", "_feature_id", "name", "ID", "Id"]
+    join_key_c = st.selectbox("Pilih kolom untuk join:", options=join_key_options, index=0, key="join_key_c")
+    custom_join_key = st.text_input("Atau masukkan nama kolom manual:", key="custom_join_key")
+    final_join_key = custom_join_key if custom_join_key else join_key_c
+    
+    if 'df_joined_c' not in st.session_state:
+        st.session_state.df_joined_c = None
+    
+    if st.button("🔗 Join Attributes (Step C)", type="primary", key="join_button_improved"):
+        if not main_file or not add_file:
+            st.error("❌ Both files must be uploaded")
+        else:
+            try:
+                main_df = None
+                if main_file.name.lower().endswith(".csv"):
+                    main_df = read_csv_with_fallback(main_file)
+                elif main_file.name.lower().endswith(".xlsx"):
+                    main_df = read_xlsx_with_fallback(main_file)
+                else:
+                    main_geo = json.load(main_file)
+                    main_df = geojson_to_dataframe(main_geo)
+    
+                add_df = None
+                if add_file.name.lower().endswith(".csv"):
+                    add_df = read_csv_with_fallback(add_file)
+                elif add_file.name.lower().endswith(".xlsx"):
+                    add_df = read_xlsx_with_fallback(add_file)
+                else:
+                    add_geo = json.load(add_file)
+                    add_df = geojson_to_dataframe(add_geo)
+    
+                if main_df is None or main_df.empty:
+                    st.error("❌ File utama tidak dapat dibaca atau kosong")
+                elif add_df is None or add_df.empty:
+                    st.error("❌ File tambahan tidak dapat dibaca atau kosong")
+                else:
+                    st.write(f"✅ File utama: {len(main_df)} records")
+                    st.write(f"✅ File tambahan: {len(add_df)} records")
                     
-                    csv_buffer_c = io.StringIO()
-                    df_joined_c.to_csv(csv_buffer_c, index=False, encoding='utf-8')
-                    st.download_button(
-                        "💾 Download CSV after join", 
-                        csv_buffer_c.getvalue().encode("utf-8"), 
-                        "joined_attributes_stepC.csv", 
-                        "text/csv"
-                    )
-
-        except Exception as e:
-            st.error(f"❌ Failed to join attributes: {e}")
-
-# --------------------------
-# --- STEP D: BULK HTML STYLING FOR PIPE-SEPARATED DATA
-# --------------------------
-st.markdown("---")
-st.header("🎨 Step D — Bulk HTML Styling for Pipe-Separated Data")
-
-st.info("Bulk styling untuk data pipe-separated: Upload CSV, pilih kolom, setiap cell akan di-styling otomatis")
-
-# Pilih sumber data
-st.subheader("📁 Pilih Sumber Data")
-
-data_source = st.radio(
-    "Pilih sumber data:",
-    ["Gunakan data dari Step C", "Upload CSV baru"],
-    index=0
-)
-
-current_df = None
-
-if data_source == "Gunakan data dari Step C":
-    if 'df_joined_c' in st.session_state and st.session_state.df_joined_c is not None:
-        current_df = st.session_state.df_joined_c
-        st.success(f"✅ Menggunakan data dari Step C ({len(current_df)} records)")
-    else:
-        st.warning("⚠️ Tidak ada data dari Step C. Silakan upload CSV baru.")
-        data_source = "Upload CSV baru"
-
-if data_source == "Upload CSV baru" or current_df is None:
-    uploaded_csv = st.file_uploader("Upload CSV file untuk styling", type=["csv"], key="html_styling_csv")
-    if uploaded_csv:
-        current_df = read_csv_with_fallback(uploaded_csv)
-        if current_df is not None:
-            st.success(f"✅ CSV berhasil dimuat ({len(current_df)} records)")
-
-# Process styling jika ada data
-if current_df is not None:
-    st.subheader("🎯 Pilih Kolom untuk Styling")
+                    df_joined_c = join_attributes(main_df, add_df, final_join_key)
+                    
+                    if df_joined_c is not None:
+                        st.session_state.df_joined_c = df_joined_c
+                        st.subheader("📋 Hasil Join")
+                        st.dataframe(df_joined_c.head(10))
+                        
+                        csv_buffer_c = io.StringIO()
+                        df_joined_c.to_csv(csv_buffer_c, index=False, encoding='utf-8')
+                        st.download_button(
+                            "💾 Download CSV after join", 
+                            csv_buffer_c.getvalue().encode("utf-8"), 
+                            "joined_attributes_stepC.csv", 
+                            "text/csv"
+                        )
     
-    st.write("**Preview Data:**")
-    st.dataframe(current_df.head(5))
+            except Exception as e:
+                st.error(f"❌ Failed to join attributes: {e}")
     
-    # Get text columns
-    text_columns = [col for col in current_df.columns 
-                   if col not in ['_feature_id', 'geometry_json', 'geometry'] 
-                   and current_df[col].dtype == 'object']
+    # --------------------------
+    # --- STEP D: BULK HTML STYLING FOR PIPE-SEPARATED DATA
+    # --------------------------
+    st.markdown("---")
+    st.header("🎨 Step D — Bulk HTML Styling for Pipe-Separated Data")
     
-    if text_columns:
-        selected_columns = st.multiselect(
-            "Pilih kolom yang berisi data pipe-separated:",
-            options=text_columns,
-            help="Pilih kolom dengan format: Field1: Value1 | Field2: Value2 | ..."
-        )
+    st.info("Bulk styling untuk data pipe-separated: Upload CSV, pilih kolom, setiap cell akan di-styling otomatis")
+    
+    # Pilih sumber data
+    st.subheader("📁 Pilih Sumber Data")
+    
+    data_source = st.radio(
+        "Pilih sumber data:",
+        ["Gunakan data dari Step C", "Upload CSV baru"],
+        index=0
+    )
+    
+    current_df = None
+    
+    if data_source == "Gunakan data dari Step C":
+        if 'df_joined_c' in st.session_state and st.session_state.df_joined_c is not None:
+            current_df = st.session_state.df_joined_c
+            st.success(f"✅ Menggunakan data dari Step C ({len(current_df)} records)")
+        else:
+            st.warning("⚠️ Tidak ada data dari Step C. Silakan upload CSV baru.")
+            data_source = "Upload CSV baru"
+    
+    if data_source == "Upload CSV baru" or current_df is None:
+        uploaded_csv = st.file_uploader("Upload CSV file untuk styling", type=["csv"], key="html_styling_csv")
+        if uploaded_csv:
+            current_df = read_csv_with_fallback(uploaded_csv)
+            if current_df is not None:
+                st.success(f"✅ CSV berhasil dimuat ({len(current_df)} records)")
+    
+    # Process styling jika ada data
+    if current_df is not None:
+        st.subheader("🎯 Pilih Kolom untuk Styling")
         
-        if selected_columns:
-            st.write(f"Selected {len(selected_columns)} columns for styling")
+        st.write("**Preview Data:**")
+        st.dataframe(current_df.head(5))
+        
+        # Get text columns
+        text_columns = [col for col in current_df.columns 
+                       if col not in ['_feature_id', 'geometry_json', 'geometry'] 
+                       and current_df[col].dtype == 'object']
+        
+        if text_columns:
+            selected_columns = st.multiselect(
+                "Pilih kolom yang berisi data pipe-separated:",
+                options=text_columns,
+                help="Pilih kolom dengan format: Field1: Value1 | Field2: Value2 | ..."
+            )
             
-            # Preview
-            st.subheader("👁️ Preview Sebelum & Sesudah Styling")
-            
-            preview_row = st.slider("Pilih baris untuk preview:", 0, min(5, len(current_df)-1), 0)
-            
-            for col in selected_columns[:2]:
-                st.write(f"**Kolom:** `{col}`")
+            if selected_columns:
+                st.write(f"Selected {len(selected_columns)} columns for styling")
                 
-                col1, col2 = st.columns(2)
+                # Preview
+                st.subheader("👁️ Preview Sebelum & Sesudah Styling")
                 
-                with col1:
-                    original_value = current_df.iloc[preview_row][col]
-                    st.text_area(
-                        "Data Asli:", 
-                        value=original_value, 
-                        height=100, 
-                        key=f"orig_{col}_{preview_row}"
-                    )
+                preview_row = st.slider("Pilih baris untuk preview:", 0, min(5, len(current_df)-1), 0)
                 
-                with col2:
-                    html_output = process_pipe_separated_data(current_df.iloc[preview_row][col])
-                    if html_output:
-                        st.components.v1.html(html_output, height=200, scrolling=True)
-                        with st.expander("Lihat HTML Code"):
-                            st.code(html_output, language='html')
-                    else:
-                        st.info("Tidak ada data untuk di-styling")
-            
-            # Bulk processing
-            if st.button("🚀 APPLY BULK HTML STYLING", type="primary"):
-                with st.spinner(f"Memproses {len(current_df)} records..."):
-                    df_styled = bulk_apply_html_styling(current_df, selected_columns)
+                for col in selected_columns[:2]:
+                    st.write(f"**Kolom:** `{col}`")
                     
-                    if df_styled is not None:
-                        st.session_state.df_styled_final = df_styled
-                        st.success(f"✅ Berhasil memproses {len(current_df)} records!")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        original_value = current_df.iloc[preview_row][col]
+                        st.text_area(
+                            "Data Asli:", 
+                            value=original_value, 
+                            height=100, 
+                            key=f"orig_{col}_{preview_row}"
+                        )
+                    
+                    with col2:
+                        html_output = process_pipe_separated_data(current_df.iloc[preview_row][col])
+                        if html_output:
+                            st.components.v1.html(html_output, height=200, scrolling=True)
+                            with st.expander("Lihat HTML Code"):
+                                st.code(html_output, language='html')
+                        else:
+                            st.info("Tidak ada data untuk di-styling")
+                
+                # Bulk processing
+                if st.button("🚀 APPLY BULK HTML STYLING", type="primary"):
+                    with st.spinner(f"Memproses {len(current_df)} records..."):
+                        df_styled = bulk_apply_html_styling(current_df, selected_columns)
                         
-                        # Show results
-                        st.subheader("📊 Hasil Styling")
-                        
-                        # Show comparison
-                        comparison_cols = []
-                        for col in selected_columns[:3]:
-                            comparison_cols.extend([col, f"{col}_styled"])
-                        
-                        if comparison_cols:
-                            st.dataframe(df_styled[comparison_cols].head(5))
-                        
-                        # Download options
-                        st.subheader("💾 Download Hasil")
-                        
-                        col1, col2, col3 = st.columns(3)
-                        
-                        with col1:
-                            csv_full = io.StringIO()
-                            df_styled.to_csv(csv_full, index=False, encoding='utf-8')
-                            st.download_button(
-                                "📥 Download Full CSV", 
-                                csv_full.getvalue().encode("utf-8"), 
-                                "styled_data_full.csv", 
-                                "text/csv"
-                            )
-                        
-                        with col2:
-                            styled_cols = [col for col in df_styled.columns if col.endswith('_styled')]
-                            original_ids = [col for col in ['_feature_id', 'id'] if col in df_styled.columns]
+                        if df_styled is not None:
+                            st.session_state.df_styled_final = df_styled
+                            st.success(f"✅ Berhasil memproses {len(current_df)} records!")
                             
-                            if styled_cols:
-                                df_only_styled = df_styled[original_ids + styled_cols]
-                                csv_styled = io.StringIO()
-                                df_only_styled.to_csv(csv_styled, index=False, encoding='utf-8')
+                            # Show results
+                            st.subheader("📊 Hasil Styling")
+                            
+                            # Show comparison
+                            comparison_cols = []
+                            for col in selected_columns[:3]:
+                                comparison_cols.extend([col, f"{col}_styled"])
+                            
+                            if comparison_cols:
+                                st.dataframe(df_styled[comparison_cols].head(5))
+                            
+                            # Download options
+                            st.subheader("💾 Download Hasil")
+                            
+                            col1, col2, col3 = st.columns(3)
+                            
+                            with col1:
+                                csv_full = io.StringIO()
+                                df_styled.to_csv(csv_full, index=False, encoding='utf-8')
                                 st.download_button(
-                                    "🎨 Download Styled Columns Only", 
-                                    csv_styled.getvalue().encode("utf-8"), 
-                                    "only_styled_columns.csv", 
+                                    "📥 Download Full CSV", 
+                                    csv_full.getvalue().encode("utf-8"), 
+                                    "styled_data_full.csv", 
                                     "text/csv"
                                 )
-                        
-                        with col3:
-                            if '_feature_id' in df_styled.columns and 'geometry_json' in df_styled.columns:
-                                geojson_output = dataframe_to_geojson(df_styled)
-                                geo_str = json.dumps(geojson_output, indent=2, ensure_ascii=False)
-                                st.download_button(
-                                    "🗺️ Download as GeoJSON", 
-                                    geo_str.encode("utf-8"), 
-                                    "styled_data.geojson", 
-                                    "application/json"
-                                )
-    else:
-        st.warning("⚠️ Tidak ditemukan kolom teks untuk di-styling")
+                            
+                            with col2:
+                                styled_cols = [col for col in df_styled.columns if col.endswith('_styled')]
+                                original_ids = [col for col in ['_feature_id', 'id'] if col in df_styled.columns]
+                                
+                                if styled_cols:
+                                    df_only_styled = df_styled[original_ids + styled_cols]
+                                    csv_styled = io.StringIO()
+                                    df_only_styled.to_csv(csv_styled, index=False, encoding='utf-8')
+                                    st.download_button(
+                                        "🎨 Download Styled Columns Only", 
+                                        csv_styled.getvalue().encode("utf-8"), 
+                                        "only_styled_columns.csv", 
+                                        "text/csv"
+                                    )
+                            
+                            with col3:
+                                if '_feature_id' in df_styled.columns and 'geometry_json' in df_styled.columns:
+                                    geojson_output = dataframe_to_geojson(df_styled)
+                                    geo_str = json.dumps(geojson_output, indent=2, ensure_ascii=False)
+                                    st.download_button(
+                                        "🗺️ Download as GeoJSON", 
+                                        geo_str.encode("utf-8"), 
+                                        "styled_data.geojson", 
+                                        "application/json"
+                                    )
+        else:
+            st.warning("⚠️ Tidak ditemukan kolom teks untuk di-styling")
+    
+    # Quick HTML converter
+    st.markdown("---")
+    st.header("🔧 Quick HTML Converter")
+    
+    test_input = st.text_area(
+        "Test konversi data pipe-separated ke HTML:",
+        value="Nama Fasilitas: Kantor Perbekel Desa Pidpid | Kecamatan: Abang | Desa: Pidpid | Banjar: Pidpid Kelod | Jenis Fasum: Wantilan | Daya Tampung: 300 orang | Fasilitas Pendukung: toilet, listrik, sumber air, dapur umum",
+        height=150
+    )
+    
+    if st.button("🔄 Convert to HTML"):
+        if test_input.strip():
+            html_result = process_pipe_separated_data(test_input)
+            st.components.v1.html(html_result, height=400, scrolling=True)
+            with st.expander("Lihat HTML Code"):
+                st.code(html_result, language='html')
+        else:
+            st.warning("Masukkan data terlebih dahulu")
+    
+    st.markdown("---")
+    st.write("**✨ Complete GeoJSON ↔ CSV Editor with Bulk HTML Styling**")
+    
+    
+    # --------------------------
+    
 
-# Quick HTML converter
-st.markdown("---")
-st.header("🔧 Quick HTML Converter")
-
-test_input = st.text_area(
-    "Test konversi data pipe-separated ke HTML:",
-    value="Nama Fasilitas: Kantor Perbekel Desa Pidpid | Kecamatan: Abang | Desa: Pidpid | Banjar: Pidpid Kelod | Jenis Fasum: Wantilan | Daya Tampung: 300 orang | Fasilitas Pendukung: toilet, listrik, sumber air, dapur umum",
-    height=150
-)
-
-if st.button("🔄 Convert to HTML"):
-    if test_input.strip():
-        html_result = process_pipe_separated_data(test_input)
-        st.components.v1.html(html_result, height=400, scrolling=True)
-        with st.expander("Lihat HTML Code"):
-            st.code(html_result, language='html')
-    else:
-        st.warning("Masukkan data terlebih dahulu")
-
-st.markdown("---")
-st.write("**✨ Complete GeoJSON ↔ CSV Editor with Bulk HTML Styling**")
-
-
-# --------------------------
 # ChatMap → reviewed uMap publishing workflow
 # --------------------------
 import copy
@@ -889,175 +922,177 @@ def _parse_chatmap_geojson(upload):
         raise ValueError("ChatMap download must be a GeoJSON FeatureCollection.")
     return data
 
-st.markdown("---")
-st.header("♻️ ChatMap → Review → Publish to uMap")
-st.caption("Manual, review-gated workflow for Brebes or another project. This does not automatically publish to HOT uMap.")
-st.markdown("**First-time uMap setup:** Open [HOT uMap](https://umap.hotosm.org/), sign in, create a new map, and save it. In the map editor, use the data import/upload control to import the verified-only `.geojson` file, check the map extent and features, then save. Keep the map URL and review-ledger backup with the project. Menu labels may differ slightly by uMap version.")
-st.info("1. Export/download GeoJSON from ChatMap. 2. Import it here. 3. Review and correct records. 4. Download the verified-only GeoJSON. 5. Upload that file to your uMap map. Re-imports are compared against the saved review ledger.")
-
-if "chatmap_review_records" not in st.session_state:
-    st.session_state.chatmap_review_records = {}
-
-with st.expander("A. Restore a saved review ledger", expanded=not bool(st.session_state.chatmap_review_records)):
-    ledger_upload = st.file_uploader("Upload a previous uMap Styler review ledger (.json)", type=["json"], key="chatmap_ledger_upload")
-    if ledger_upload and st.button("Restore ledger", key="restore_chatmap_ledger"):
-        try:
-            restored = load_working_ledger(json.loads(ledger_upload.getvalue().decode("utf-8-sig")))
-            st.session_state.chatmap_review_records = restored
-            st.success(f"Restored {len(restored)} review records.")
-        except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-            st.error(f"Ledger not restored: {exc}")
-
-with st.expander("B. Import the latest ChatMap GeoJSON", expanded=True):
-    chatmap_upload = st.file_uploader("ChatMap GeoJSON download", type=["geojson", "json"], key="chatmap_geojson_upload")
-    if chatmap_upload and st.button("Import / compare with current ledger", type="primary", key="import_chatmap"):
-        try:
-            parsed = _parse_chatmap_geojson(chatmap_upload)
-            records, counts = import_chatmap_geojson(parsed, st.session_state.chatmap_review_records)
-            st.session_state.chatmap_review_records = records
-            st.success(f"Import checked: {counts['new']} new, {counts['unchanged']} unchanged, {counts['changed']} changed/conflicting, {counts['invalid']} invalid feature(s) skipped.")
-        except ValueError as exc:
-            st.error(f"Import failed: {exc}")
-
-records = st.session_state.chatmap_review_records
-if records:
-    status_counts = {status: sum(1 for r in records.values() if r.get("status") == status) for status in REVIEW_STATUSES}
-    metric_cols = st.columns(4)
-    for col, status in zip(metric_cols, REVIEW_STATUSES):
-        col.metric(status, status_counts[status])
-    conflict_count = sum(1 for r in records.values() if r.get("conflict"))
-    st.caption(f"{conflict_count} record(s) have changed source data awaiting review. Conflicted records cannot be published.")
-
-
-    with st.expander("C. Detect text-quality issues and inconsistent labels", expanded=False):
-        st.caption("Local checks only: whitespace, case/format variants, and similar values within the same field. Similarity is a clue, not proof. No report text is sent to an external service.")
-        if st.button("Scan reviewed text", key="chatmap_text_quality_scan"):
-            issue_rows = []
-            for rid, rec in records.items():
-                for issue in inspect_text_quality(rec.get("reviewed_properties") or {}):
-                    issue_rows.append({
-                        "Report ID": rid, "Field": issue["field"], "Issue": issue["issue"],
-                        "Original": issue["original"], "Suggestion": issue["suggestion"]
-                    })
-            st.session_state.chatmap_text_quality_issues = issue_rows
-            st.session_state.chatmap_text_quality_findings = find_text_inconsistencies(records)
-        if "chatmap_text_quality_issues" in st.session_state:
-            issue_rows = st.session_state.chatmap_text_quality_issues
-            if issue_rows:
-                st.write(f"**Whitespace findings:** {len(issue_rows)}")
-                st.dataframe(pd.DataFrame(issue_rows), use_container_width=True)
-                st.warning("Whitespace cleanup is proposed, not applied automatically.")
-                if st.button("Approve and apply whitespace-only cleanup", key="approve_whitespace_cleanup"):
-                    changed = apply_approved_whitespace_cleanup(records)
-                    st.session_state.chatmap_review_records = records
-                    st.success(f"Applied whitespace cleanup to {changed} eligible record(s). Changed records are now Needs correction and must be reviewed again.")
-                    st.rerun()
-            else:
-                st.success("No whitespace issues found in reviewed text.")
-        if "chatmap_text_quality_findings" in st.session_state:
-            findings = st.session_state.chatmap_text_quality_findings
-            if findings:
-                st.write(f"**Potential inconsistent labels / typos:** {len(findings)}")
-                options = list(range(len(findings)))
-                selected_finding = st.selectbox(
-                    "Choose a suggested cluster",
-                    options=options,
-                    format_func=lambda idx: (
-                        f"{findings[idx]['field']}: {' ↔ '.join(findings[idx]['values'])} "
-                        f"({findings[idx]['kind']}, similarity {findings[idx]['similarity']:.3f})"
-                    ),
-                    key="chatmap_text_cluster_choice"
-                )
-                finding = findings[selected_finding]
-                st.write("Values and counts in this cluster:")
-                st.dataframe(pd.DataFrame([
-                    {"Value": value, "Count": finding["counts"].get(value, 0)}
-                    for value in finding["values"]
-                ]), use_container_width=True)
-                st.caption("Review the context before merging. Similar spelling can represent different places, objects, or meanings.")
-                approved_value = st.text_input(
-                    "Approved canonical value (editable)",
-                    value=finding["canonical"],
-                    key=f"chatmap_canonical_{selected_finding}"
-                )
-                if st.button("Approve this mapping across eligible records", key="apply_text_cluster"):
-                    if not approved_value.strip():
-                        st.error("Canonical value cannot be empty.")
-                    else:
-                        mapping = {value: approved_value for value in finding["values"] if value != approved_value}
-                        try:
-                            changed = apply_approved_text_replacements(records, finding["field"], mapping)
-                            st.session_state.chatmap_review_records = records
-                            st.success(f"Applied the approved mapping to {changed} eligible record(s). Changed records are now Needs correction and must be reviewed again.")
-                            st.rerun()
-                        except ValueError as exc:
-                            st.error(f"Mapping not applied: {exc}")
-            else:
-                st.success("No likely same-field text variants found at the current similarity threshold.")
-        else:
-            st.info("Run the scan to inspect whitespace issues and likely text variants.")
-
-    with st.expander("D. Review and correct one report", expanded=True):
-        ids = list(records.keys())
-        labels = {rid: f"{rid} — {records[rid].get('status', 'New')}" + (" ⚠ conflict" if records[rid].get("conflict") else "") for rid in ids}
-        selected_id = st.selectbox("Report", options=ids, format_func=lambda rid: labels[rid], key="selected_chatmap_report")
-        record = records[selected_id]
-        st.write("**Incoming/source data**")
-        st.json(record.get("source", {}))
-        if record.get("conflict"):
-            st.warning("A newer ChatMap export changed this report. The reviewed/source version has not been silently replaced.")
-            st.json(record.get("incoming_source", {}))
-            if st.button("Accept incoming source for re-review", key="accept_chatmap_incoming"):
-                promote_incoming_source(records, selected_id)
-                st.session_state.chatmap_review_records = records
-                st.rerun()
-        properties_text = st.text_area(
-            "Corrected properties (JSON object)",
-            value=json.dumps(record.get("reviewed_properties") or {}, ensure_ascii=False, indent=2),
-            height=220,
-            key=f"review_props_{selected_id}"
-        )
-        status = st.selectbox("Review status", options=REVIEW_STATUSES, index=REVIEW_STATUSES.index(record.get("status", "New")), key=f"review_status_{selected_id}")
-        notes = st.text_area("Reviewer notes", value=record.get("notes", ""), key=f"review_notes_{selected_id}")
-        if st.button("Save review", type="primary", key="save_chatmap_review"):
+if active_workspace == "ChatMap review":
+    st.markdown("---")
+    st.header("♻️ ChatMap review & publication")
+    st.caption("Import ChatMap reports, inspect possible text issues, review corrections, then export verified-only GeoJSON. This app does not automatically publish to HOT uMap.")
+    st.markdown("**First-time uMap setup:** Open [HOT uMap](https://umap.hotosm.org/), sign in, create a new map, and save it. In the map editor, use the data import/upload control to import the verified-only `.geojson` file, check the map extent and features, then save. Keep the map URL and review-ledger backup with the project. Menu labels may differ slightly by uMap version.")
+    st.info("1. Export/download GeoJSON from ChatMap. 2. Import it here. 3. Review and correct records. 4. Download the verified-only GeoJSON. 5. Upload that file to your uMap map. Re-imports are compared against the saved review ledger.")
+    
+    if "chatmap_review_records" not in st.session_state:
+        st.session_state.chatmap_review_records = {}
+    
+    with st.expander("A. Restore a saved review ledger", expanded=not bool(st.session_state.chatmap_review_records)):
+        ledger_upload = st.file_uploader("Upload a previous uMap Styler review ledger (.json)", type=["json"], key="chatmap_ledger_upload")
+        if ledger_upload and st.button("Restore ledger", key="restore_chatmap_ledger"):
             try:
-                corrected = json.loads(properties_text)
-                if not isinstance(corrected, dict):
-                    raise ValueError("Corrected properties must be a JSON object.")
-                if status == "Verified" and record.get("conflict"):
-                    raise ValueError("Resolve the incoming-source conflict before marking this record Verified.")
-                record["reviewed_properties"] = corrected
-                record["status"] = status
-                record["notes"] = notes
+                restored = load_working_ledger(json.loads(ledger_upload.getvalue().decode("utf-8-sig")))
+                st.session_state.chatmap_review_records = restored
+                st.success(f"Restored {len(restored)} review records.")
+            except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                st.error(f"Ledger not restored: {exc}")
+    
+    with st.expander("B. Import the latest ChatMap GeoJSON", expanded=True):
+        chatmap_upload = st.file_uploader("ChatMap GeoJSON download", type=["geojson", "json"], key="chatmap_geojson_upload")
+        if chatmap_upload and st.button("Import / compare with current ledger", type="primary", key="import_chatmap"):
+            try:
+                parsed = _parse_chatmap_geojson(chatmap_upload)
+                records, counts = import_chatmap_geojson(parsed, st.session_state.chatmap_review_records)
                 st.session_state.chatmap_review_records = records
-                st.success("Review saved for this session. Download the ledger below to preserve it across sessions.")
-            except (json.JSONDecodeError, ValueError) as exc:
-                st.error(f"Review not saved: {exc}")
-
-    with st.expander("E. Preview and export", expanded=True):
-        publishable = reviewed_geojson(records)
-        st.write(f"**Publishable verified records:** {len(publishable['features'])} / {len(records)}")
-        st.dataframe(pd.DataFrame([
-            {"Report ID": rid, "Status": rec.get("status"), "Conflict": bool(rec.get("conflict")), "Notes": rec.get("notes", "")}
-            for rid, rec in records.items()
-        ]), use_container_width=True)
-        if publishable["features"]:
-            st.json(publishable)
-        else:
-            st.warning("Nothing is eligible for publication yet. Only Verified, conflict-free records are exported.")
-        st.download_button(
-            "Download verified-only GeoJSON for uMap",
-            data=json.dumps(publishable, ensure_ascii=False, indent=2).encode("utf-8"),
-            file_name="verified_for_umap.geojson",
-            mime="application/geo+json",
-            disabled=not bool(publishable["features"]),
-            key="download_verified_chatmap_geojson"
-        )
-        st.download_button(
-            "Download review ledger backup",
-            data=json.dumps(working_ledger_geojson(records), ensure_ascii=False, indent=2).encode("utf-8"),
-            file_name="chatmap_review_ledger.json",
-            mime="application/json",
-            key="download_chatmap_review_ledger"
-        )
-        st.caption("The ledger is the review history/working copy. Keep it with your project files. The app intentionally does not push to a uMap server because no map exists yet and authenticated write behavior has not been verified.")
+                st.success(f"Import checked: {counts['new']} new, {counts['unchanged']} unchanged, {counts['changed']} changed/conflicting, {counts['invalid']} invalid feature(s) skipped.")
+            except ValueError as exc:
+                st.error(f"Import failed: {exc}")
+    
+    records = st.session_state.chatmap_review_records
+    if records:
+        status_counts = {status: sum(1 for r in records.values() if r.get("status") == status) for status in REVIEW_STATUSES}
+        metric_cols = st.columns(4)
+        for col, status in zip(metric_cols, REVIEW_STATUSES):
+            col.metric(status, status_counts[status])
+        conflict_count = sum(1 for r in records.values() if r.get("conflict"))
+        st.caption(f"{conflict_count} record(s) have changed source data awaiting review. Conflicted records cannot be published.")
+    
+    
+        with st.expander("C. Detect text-quality issues and inconsistent labels", expanded=False):
+            st.caption("Local checks only: whitespace, case/format variants, and similar values within the same field. Similarity is a clue, not proof. No report text is sent to an external service.")
+            if st.button("Scan reviewed text", key="chatmap_text_quality_scan"):
+                issue_rows = []
+                for rid, rec in records.items():
+                    for issue in inspect_text_quality(rec.get("reviewed_properties") or {}):
+                        issue_rows.append({
+                            "Report ID": rid, "Field": issue["field"], "Issue": issue["issue"],
+                            "Original": issue["original"], "Suggestion": issue["suggestion"]
+                        })
+                st.session_state.chatmap_text_quality_issues = issue_rows
+                st.session_state.chatmap_text_quality_findings = find_text_inconsistencies(records)
+            if "chatmap_text_quality_issues" in st.session_state:
+                issue_rows = st.session_state.chatmap_text_quality_issues
+                if issue_rows:
+                    st.write(f"**Whitespace findings:** {len(issue_rows)}")
+                    st.dataframe(pd.DataFrame(issue_rows), use_container_width=True)
+                    st.warning("Whitespace cleanup is proposed, not applied automatically.")
+                    if st.button("Approve and apply whitespace-only cleanup", key="approve_whitespace_cleanup"):
+                        changed = apply_approved_whitespace_cleanup(records)
+                        st.session_state.chatmap_review_records = records
+                        st.success(f"Applied whitespace cleanup to {changed} eligible record(s). Changed records are now Needs correction and must be reviewed again.")
+                        st.rerun()
+                else:
+                    st.success("No whitespace issues found in reviewed text.")
+            if "chatmap_text_quality_findings" in st.session_state:
+                findings = st.session_state.chatmap_text_quality_findings
+                if findings:
+                    st.write(f"**Potential inconsistent labels / typos:** {len(findings)}")
+                    options = list(range(len(findings)))
+                    selected_finding = st.selectbox(
+                        "Choose a suggested cluster",
+                        options=options,
+                        format_func=lambda idx: (
+                            f"{findings[idx]['field']}: {' ↔ '.join(findings[idx]['values'])} "
+                            f"({findings[idx]['kind']}, similarity {findings[idx]['similarity']:.3f})"
+                        ),
+                        key="chatmap_text_cluster_choice"
+                    )
+                    finding = findings[selected_finding]
+                    st.write("Values and counts in this cluster:")
+                    st.dataframe(pd.DataFrame([
+                        {"Value": value, "Count": finding["counts"].get(value, 0)}
+                        for value in finding["values"]
+                    ]), use_container_width=True)
+                    st.caption("Review the context before merging. Similar spelling can represent different places, objects, or meanings.")
+                    approved_value = st.text_input(
+                        "Approved canonical value (editable)",
+                        value=finding["canonical"],
+                        key=f"chatmap_canonical_{selected_finding}"
+                    )
+                    if st.button("Approve this mapping across eligible records", key="apply_text_cluster"):
+                        if not approved_value.strip():
+                            st.error("Canonical value cannot be empty.")
+                        else:
+                            mapping = {value: approved_value for value in finding["values"] if value != approved_value}
+                            try:
+                                changed = apply_approved_text_replacements(records, finding["field"], mapping)
+                                st.session_state.chatmap_review_records = records
+                                st.success(f"Applied the approved mapping to {changed} eligible record(s). Changed records are now Needs correction and must be reviewed again.")
+                                st.rerun()
+                            except ValueError as exc:
+                                st.error(f"Mapping not applied: {exc}")
+                else:
+                    st.success("No likely same-field text variants found at the current similarity threshold.")
+            else:
+                st.info("Run the scan to inspect whitespace issues and likely text variants.")
+    
+        with st.expander("D. Review and correct one report", expanded=True):
+            ids = list(records.keys())
+            labels = {rid: f"{rid} — {records[rid].get('status', 'New')}" + (" ⚠ conflict" if records[rid].get("conflict") else "") for rid in ids}
+            selected_id = st.selectbox("Report", options=ids, format_func=lambda rid: labels[rid], key="selected_chatmap_report")
+            record = records[selected_id]
+            st.write("**Incoming/source data**")
+            st.json(record.get("source", {}))
+            if record.get("conflict"):
+                st.warning("A newer ChatMap export changed this report. The reviewed/source version has not been silently replaced.")
+                st.json(record.get("incoming_source", {}))
+                if st.button("Accept incoming source for re-review", key="accept_chatmap_incoming"):
+                    promote_incoming_source(records, selected_id)
+                    st.session_state.chatmap_review_records = records
+                    st.rerun()
+            properties_text = st.text_area(
+                "Corrected properties (JSON object)",
+                value=json.dumps(record.get("reviewed_properties") or {}, ensure_ascii=False, indent=2),
+                height=220,
+                key=f"review_props_{selected_id}"
+            )
+            status = st.selectbox("Review status", options=REVIEW_STATUSES, index=REVIEW_STATUSES.index(record.get("status", "New")), key=f"review_status_{selected_id}")
+            notes = st.text_area("Reviewer notes", value=record.get("notes", ""), key=f"review_notes_{selected_id}")
+            if st.button("Save review", type="primary", key="save_chatmap_review"):
+                try:
+                    corrected = json.loads(properties_text)
+                    if not isinstance(corrected, dict):
+                        raise ValueError("Corrected properties must be a JSON object.")
+                    if status == "Verified" and record.get("conflict"):
+                        raise ValueError("Resolve the incoming-source conflict before marking this record Verified.")
+                    record["reviewed_properties"] = corrected
+                    record["status"] = status
+                    record["notes"] = notes
+                    st.session_state.chatmap_review_records = records
+                    st.success("Review saved for this session. Download the ledger below to preserve it across sessions.")
+                except (json.JSONDecodeError, ValueError) as exc:
+                    st.error(f"Review not saved: {exc}")
+    
+        with st.expander("E. Preview and export", expanded=True):
+            publishable = reviewed_geojson(records)
+            st.write(f"**Publishable verified records:** {len(publishable['features'])} / {len(records)}")
+            st.dataframe(pd.DataFrame([
+                {"Report ID": rid, "Status": rec.get("status"), "Conflict": bool(rec.get("conflict")), "Notes": rec.get("notes", "")}
+                for rid, rec in records.items()
+            ]), use_container_width=True)
+            if publishable["features"]:
+                st.json(publishable)
+            else:
+                st.warning("Nothing is eligible for publication yet. Only Verified, conflict-free records are exported.")
+            st.download_button(
+                "Download verified-only GeoJSON for uMap",
+                data=json.dumps(publishable, ensure_ascii=False, indent=2).encode("utf-8"),
+                file_name="verified_for_umap.geojson",
+                mime="application/geo+json",
+                disabled=not bool(publishable["features"]),
+                key="download_verified_chatmap_geojson"
+            )
+            st.download_button(
+                "Download review ledger backup",
+                data=json.dumps(working_ledger_geojson(records), ensure_ascii=False, indent=2).encode("utf-8"),
+                file_name="chatmap_review_ledger.json",
+                mime="application/json",
+                key="download_chatmap_review_ledger"
+            )
+            st.caption("The ledger is the review history/working copy. Keep it with your project files. The app intentionally does not push to a uMap server because no map exists yet and authenticated write behavior has not been verified.")
+    
