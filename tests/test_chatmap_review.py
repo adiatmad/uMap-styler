@@ -16,12 +16,14 @@ HELPERS = {
     "_canonical_json", "_fingerprint", "_source_properties",
     "_source_snapshot", "_review_id", "import_chatmap_geojson",
     "promote_incoming_source", "reviewed_geojson", "working_ledger_geojson",
-    "load_working_ledger",
+    "load_working_ledger", "normalize_review_text", "inspect_text_quality",
+    "find_text_inconsistencies", "apply_approved_text_replacements",
 }
 NAMESPACE = {
     "json": json, "hashlib": hashlib, "copy": copy,
     "REVIEW_STATUSES": ("New", "Needs correction", "Verified", "Rejected"),
     "html_lib": html,
+    "difflib": __import__("difflib"),
     "_REVIEW_KEYS": {"_review_id", "_review_status", "_review_notes",
                      "_source_fingerprint", "_source_snapshot", "_reviewed_properties"},
 }
@@ -132,6 +134,62 @@ class ChatMapReviewTests(unittest.TestCase):
         self.assertTrue(accepted)
         self.assertFalse(ledger["r1"]["conflict"])
         self.assertEqual(ledger["r1"]["status"], "Needs correction")
+
+
+class TextQualityReviewTests(unittest.TestCase):
+    def setUp(self):
+        self.normalize = NAMESPACE["normalize_review_text"]
+        self.inspect = NAMESPACE["inspect_text_quality"]
+        self.cluster = NAMESPACE["find_text_inconsistencies"]
+        self.apply = NAMESPACE["apply_approved_text_replacements"]
+
+    def test_whitespace_normalization_is_conservative(self):
+        self.assertEqual(self.normalize("  sampah   plastik\\n"), "sampah plastik")
+        self.assertEqual(self.normalize("Kaliwlingi"), "Kaliwlingi")
+        self.assertEqual(self.normalize("e-mail / WhatsApp!"), "e-mail / WhatsApp!")
+
+    def test_quality_scan_suggests_but_does_not_mutate_properties(self):
+        props = {"description": "  sampah   plastik  ", "location": "Kaliwlingi"}
+        original = copy.deepcopy(props)
+        issues = self.inspect(props)
+        self.assertEqual(props, original)
+        self.assertTrue(any(i["field"] == "description" and i["suggestion"] == "sampah plastik" for i in issues))
+        self.assertFalse(any(i["field"] == "location" for i in issues))
+
+    def test_inconsistency_clusters_find_formatting_and_likely_typo(self):
+        records = {
+            "1": {"reviewed_properties": {"waste_type": "Sampah Plastik"}, "status": "New"},
+            "2": {"reviewed_properties": {"waste_type": "sampah plastik"}, "status": "Verified"},
+            "3": {"reviewed_properties": {"waste_type": "sampah plstik"}, "status": "New"},
+            "4": {"reviewed_properties": {"waste_type": "Sampah Plastik"}, "status": "New"},
+        }
+        findings = self.cluster(records, threshold=0.82)
+        self.assertTrue(any(set(f["values"]) == {"Sampah Plastik", "sampah plastik"} and f["kind"] == "formatting" for f in findings))
+        self.assertTrue(any(set(f["values"]) == {"sampah plastik", "sampah plstik"} and f["kind"] == "possible_typo" for f in findings))
+        self.assertTrue(all("similarity" in f and "canonical" in f for f in findings))
+
+    def test_bulk_replacement_requires_explicit_mapping_and_demotes_verified(self):
+        records = {
+            "1": {"source": {"properties": {"category": "sampah plstik"}}, "reviewed_properties": {"category": "sampah plstik"}, "status": "Verified", "conflict": False},
+            "2": {"source": {"properties": {"category": "sampah plstik"}}, "reviewed_properties": {"category": "sampah plstik"}, "status": "New", "conflict": False},
+            "3": {"source": {"properties": {"category": "sampah plstik"}}, "reviewed_properties": {"category": "sampah plstik"}, "status": "Verified", "conflict": True},
+            "4": {"source": {"properties": {"category": "sampah plstik"}}, "reviewed_properties": {"category": "sampah plstik"}, "status": "Rejected", "conflict": False},
+        }
+        changed = self.apply(records, "category", {"sampah plstik": "sampah plastik"})
+        self.assertEqual(changed, 2)
+        self.assertEqual(records["1"]["reviewed_properties"]["category"], "sampah plastik")
+        self.assertEqual(records["1"]["status"], "Needs correction")
+        self.assertEqual(records["2"]["status"], "Needs correction")
+        self.assertEqual(records["3"]["reviewed_properties"]["category"], "sampah plstik")
+        self.assertEqual(records["4"]["status"], "Rejected")
+        self.assertEqual(records["1"]["source"]["properties"]["category"], "sampah plstik")
+
+    def test_bulk_replacement_rejects_invalid_inputs(self):
+        records = {"1": {"reviewed_properties": {"category": "old"}, "status": "New", "conflict": False}}
+        with self.assertRaises(ValueError):
+            self.apply(records, "", {"old": "new"})
+        with self.assertRaises(ValueError):
+            self.apply(records, "category", {"old": ""})
 
 if __name__ == "__main__":
     unittest.main()
