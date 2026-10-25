@@ -231,7 +231,7 @@ class TextQualityReviewTests(unittest.TestCase):
 
 
     def test_project_vocabulary_merge_is_case_insensitive_and_preserves_existing_terms(self):
-        merged = NAMESPACE["merge_project_vocabulary"]("Kaliwlingi\\nBrebes", ["brebes", "Plastik", "plastik", ""])
+        merged = NAMESPACE["merge_project_vocabulary"]("Kaliwlingi\nBrebes", ["brebes", "Plastik", "plastik", ""])
         self.assertEqual(merged.splitlines(), ["Kaliwlingi", "Brebes", "Plastik"])
 
     def test_spellcheck_skips_project_vocabulary_and_capitalized_names(self):
