@@ -8,6 +8,7 @@ import copy
 import hashlib
 import html
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -22,7 +23,7 @@ HELPERS = {
 NAMESPACE = {
     "json": json, "hashlib": hashlib, "copy": copy,
     "REVIEW_STATUSES": ("New", "Needs correction", "Verified", "Rejected"),
-    "html_lib": html,
+    "html_lib": html, "re": re,
     "difflib": __import__("difflib"),
     "_REVIEW_KEYS": {"_review_id", "_review_status", "_review_notes",
                      "_source_fingerprint", "_source_snapshot", "_reviewed_properties"},
@@ -144,7 +145,7 @@ class TextQualityReviewTests(unittest.TestCase):
         self.apply = NAMESPACE["apply_approved_text_replacements"]
 
     def test_whitespace_normalization_is_conservative(self):
-        self.assertEqual(self.normalize("  sampah   plastik\\n"), "sampah plastik")
+        self.assertEqual(self.normalize("  sampah   plastik\n"), "sampah plastik")
         self.assertEqual(self.normalize("Kaliwlingi"), "Kaliwlingi")
         self.assertEqual(self.normalize("e-mail / WhatsApp!"), "e-mail / WhatsApp!")
 
