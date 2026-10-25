@@ -8,6 +8,7 @@ import pandas as pd
 import json
 import io
 import re
+import html as html_lib
 from typing import List, Dict, Any
 
 st.set_page_config(page_title="GeoJSON ↔ CSV Bulk Editor", layout="wide")
@@ -174,11 +175,13 @@ def create_universal_html(fields, style_type="default"):
     
     fields_html = ""
     for field_name, field_value in fields.items():
-        if field_value and field_value.strip():
+        if field_value and str(field_value).strip():
+            safe_name = html_lib.escape(str(field_name), quote=True)
+            safe_value = html_lib.escape(str(field_value), quote=True)
             fields_html += f'''
   <div style="display: flex; align-items: start; margin-bottom: 8px;">
-  <div style="min-width: 160px; font-weight: bold; color: #2c3e50;">{field_name}</div>
-  <div style="flex: 1;">: {field_value}</div>
+  <div style="min-width: 160px; font-weight: bold; color: #2c3e50;">{safe_name}</div>
+  <div style="flex: 1;">: {safe_value}</div>
   </div>
 '''
     
@@ -587,3 +590,271 @@ if st.button("🔄 Convert to HTML"):
 
 st.markdown("---")
 st.write("**✨ Complete GeoJSON ↔ CSV Editor with Bulk HTML Styling**")
+
+
+# --------------------------
+# ChatMap → reviewed uMap publishing workflow
+# --------------------------
+import copy
+import hashlib
+
+REVIEW_STATUSES = ("New", "Needs correction", "Verified", "Rejected")
+_REVIEW_KEYS = {"_review_id", "_review_status", "_review_notes", "_source_fingerprint", "_source_snapshot", "_reviewed_properties"}
+
+def _canonical_json(value):
+    return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
+
+def _fingerprint(value):
+    return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
+
+def _source_properties(feature):
+    return {k: v for k, v in (feature.get("properties") or {}).items() if k not in _REVIEW_KEYS}
+
+def _source_snapshot(feature):
+    return {"geometry": feature.get("geometry"), "properties": _source_properties(feature)}
+
+def _review_id(feature, index=0):
+    props = _source_properties(feature)
+    for key in ("report_id", "message_id", "chatmap_id", "uuid", "id"):
+        value = props.get(key)
+        if value not in (None, ""):
+            return str(value)
+    if feature.get("id") not in (None, ""):
+        return str(feature["id"])
+    # Geometry is a useful stable fallback for repeated exports. If several reports
+    # share a location, the importer adds a deterministic suffix rather than dropping one.
+    return "cm-" + _fingerprint(_source_snapshot(feature))[:20]
+
+def import_chatmap_geojson(geojson, existing_records=None):
+    """Merge a ChatMap GeoJSON export into a review ledger without overwriting edits."""
+    if not isinstance(geojson, dict) or geojson.get("type") != "FeatureCollection":
+        raise ValueError("Expected a GeoJSON FeatureCollection.")
+    incoming = geojson.get("features")
+    if not isinstance(incoming, list):
+        raise ValueError("FeatureCollection must contain a features array.")
+    existing_records = existing_records or {}
+    records = copy.deepcopy(existing_records)
+    counts = {"new": 0, "unchanged": 0, "changed": 0, "invalid": 0}
+    seen_in_import = set()
+    for index, raw in enumerate(incoming):
+        if not isinstance(raw, dict) or raw.get("type") != "Feature":
+            counts["invalid"] += 1
+            continue
+        geometry = raw.get("geometry")
+        valid_geometry_types = {
+            "Point", "MultiPoint", "LineString", "MultiLineString",
+            "Polygon", "MultiPolygon", "GeometryCollection"
+        }
+        if (
+            "geometry" not in raw
+            or (geometry is not None and (
+                not isinstance(geometry, dict)
+                or geometry.get("type") not in valid_geometry_types
+            ))
+            or not isinstance(raw.get("properties", {}) or {}, dict)
+        ):
+            counts["invalid"] += 1
+            continue
+        feature = copy.deepcopy(raw)
+        props = _source_properties(feature)
+        source = {"type": "Feature", "geometry": feature.get("geometry"), "properties": props}
+        rid = _review_id(feature, index)
+        if rid in seen_in_import:
+            rid = rid + "-" + _fingerprint(source)[:8]
+        seen_in_import.add(rid)
+        fingerprint = _fingerprint(source)
+        has_explicit_id = (
+            feature.get("id") not in (None, "")
+            or any(props.get(key) not in (None, "") for key in ("report_id", "message_id", "chatmap_id", "uuid", "id"))
+        )
+        if rid not in records and not has_explicit_id:
+            # ChatMap exports may omit stable feature IDs. Match an otherwise-unmatched
+            # report at the same geometry so changed text/media is flagged as a conflict
+            # rather than imported as a second report. Ambiguous shared locations are
+            # deliberately not auto-matched.
+            geometry_matches = [
+                existing_id for existing_id, existing in records.items()
+                if existing.get("source", {}).get("geometry") == source.get("geometry")
+                and not existing.get("conflict")
+            ]
+            if source.get("geometry") is not None and len(geometry_matches) == 1:
+                rid = geometry_matches[0]
+        if rid not in records:
+            records[rid] = {
+                "id": rid, "source": source, "source_fingerprint": fingerprint,
+                "reviewed_properties": copy.deepcopy(props), "status": "New",
+                "notes": "", "conflict": False
+            }
+            counts["new"] += 1
+            continue
+        current = records[rid]
+        if current.get("source_fingerprint") == fingerprint:
+            counts["unchanged"] += 1
+            continue
+        # Incoming changes are staged as a conflict. Never replace a human-reviewed
+        # version or silently promote changed content into the publication set.
+        current["incoming_source"] = source
+        current["incoming_fingerprint"] = fingerprint
+        current["conflict"] = True
+        if current.get("status") == "Verified":
+            current["status"] = "Needs correction"
+        counts["changed"] += 1
+    return records, counts
+
+def promote_incoming_source(records, rid):
+    record = records[rid]
+    if not record.get("conflict") or not record.get("incoming_source"):
+        return False
+    record["source"] = copy.deepcopy(record["incoming_source"])
+    record["source_fingerprint"] = record["incoming_fingerprint"]
+    record["reviewed_properties"] = copy.deepcopy(record["source"].get("properties") or {})
+    record.pop("incoming_source", None)
+    record.pop("incoming_fingerprint", None)
+    record["conflict"] = False
+    record["status"] = "Needs correction"
+    return True
+
+def reviewed_geojson(records):
+    features = []
+    for rid, record in records.items():
+        if record.get("status") != "Verified" or record.get("conflict"):
+            continue
+        source = record.get("source") or {}
+        props = copy.deepcopy(record.get("reviewed_properties") or {})
+        features.append({
+            "type": "Feature",
+            "id": str(rid),
+            "geometry": copy.deepcopy(source.get("geometry")),
+            "properties": props
+        })
+    return {"type": "FeatureCollection", "features": features}
+
+def working_ledger_geojson(records):
+    """Portable backup format: review metadata stays outside publishable properties."""
+    return {"type": "ChatMapReviewLedger", "version": 1, "records": records}
+
+def load_working_ledger(data):
+    if not isinstance(data, dict) or data.get("type") != "ChatMapReviewLedger" or data.get("version") != 1:
+        raise ValueError("Not a supported uMap Styler review-ledger file (version 1).")
+    records = data.get("records")
+    if not isinstance(records, dict):
+        raise ValueError("Review ledger records must be an object.")
+    for rid, record in records.items():
+        if not isinstance(record, dict) or record.get("status") not in REVIEW_STATUSES:
+            raise ValueError(f"Invalid review record or status for {rid!r}.")
+        if not isinstance(record.get("source"), dict) or not isinstance(record.get("reviewed_properties"), dict):
+            raise ValueError(f"Invalid source or reviewed properties for {rid!r}.")
+    return copy.deepcopy(records)
+
+def _parse_chatmap_geojson(upload):
+    try:
+        data = json.loads(upload.getvalue().decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Could not parse UTF-8 JSON: {exc}") from exc
+    if not isinstance(data, dict) or data.get("type") != "FeatureCollection":
+        raise ValueError("ChatMap download must be a GeoJSON FeatureCollection.")
+    return data
+
+st.markdown("---")
+st.header("♻️ ChatMap → Review → Publish to uMap")
+st.caption("Manual, review-gated workflow for Brebes or another project. This does not automatically publish to HOT uMap.")
+st.markdown("**First-time uMap setup:** Open [HOT uMap](https://umap.hotosm.org/), sign in, create a new map, and save it. In the map editor, use the data import/upload control to import the verified-only `.geojson` file, check the map extent and features, then save. Keep the map URL and review-ledger backup with the project. Menu labels may differ slightly by uMap version.")
+st.info("1. Export/download GeoJSON from ChatMap. 2. Import it here. 3. Review and correct records. 4. Download the verified-only GeoJSON. 5. Upload that file to your uMap map. Re-imports are compared against the saved review ledger.")
+
+if "chatmap_review_records" not in st.session_state:
+    st.session_state.chatmap_review_records = {}
+
+with st.expander("A. Restore a saved review ledger", expanded=not bool(st.session_state.chatmap_review_records)):
+    ledger_upload = st.file_uploader("Upload a previous uMap Styler review ledger (.json)", type=["json"], key="chatmap_ledger_upload")
+    if ledger_upload and st.button("Restore ledger", key="restore_chatmap_ledger"):
+        try:
+            restored = load_working_ledger(json.loads(ledger_upload.getvalue().decode("utf-8-sig")))
+            st.session_state.chatmap_review_records = restored
+            st.success(f"Restored {len(restored)} review records.")
+        except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            st.error(f"Ledger not restored: {exc}")
+
+with st.expander("B. Import the latest ChatMap GeoJSON", expanded=True):
+    chatmap_upload = st.file_uploader("ChatMap GeoJSON download", type=["geojson", "json"], key="chatmap_geojson_upload")
+    if chatmap_upload and st.button("Import / compare with current ledger", type="primary", key="import_chatmap"):
+        try:
+            parsed = _parse_chatmap_geojson(chatmap_upload)
+            records, counts = import_chatmap_geojson(parsed, st.session_state.chatmap_review_records)
+            st.session_state.chatmap_review_records = records
+            st.success(f"Import checked: {counts['new']} new, {counts['unchanged']} unchanged, {counts['changed']} changed/conflicting, {counts['invalid']} invalid feature(s) skipped.")
+        except ValueError as exc:
+            st.error(f"Import failed: {exc}")
+
+records = st.session_state.chatmap_review_records
+if records:
+    status_counts = {status: sum(1 for r in records.values() if r.get("status") == status) for status in REVIEW_STATUSES}
+    metric_cols = st.columns(4)
+    for col, status in zip(metric_cols, REVIEW_STATUSES):
+        col.metric(status, status_counts[status])
+    conflict_count = sum(1 for r in records.values() if r.get("conflict"))
+    st.caption(f"{conflict_count} record(s) have changed source data awaiting review. Conflicted records cannot be published.")
+
+    with st.expander("C. Review and correct one report", expanded=True):
+        ids = list(records.keys())
+        labels = {rid: f"{rid} — {records[rid].get('status', 'New')}" + (" ⚠ conflict" if records[rid].get("conflict") else "") for rid in ids}
+        selected_id = st.selectbox("Report", options=ids, format_func=lambda rid: labels[rid], key="selected_chatmap_report")
+        record = records[selected_id]
+        st.write("**Incoming/source data**")
+        st.json(record.get("source", {}))
+        if record.get("conflict"):
+            st.warning("A newer ChatMap export changed this report. The reviewed/source version has not been silently replaced.")
+            st.json(record.get("incoming_source", {}))
+            if st.button("Accept incoming source for re-review", key="accept_chatmap_incoming"):
+                promote_incoming_source(records, selected_id)
+                st.session_state.chatmap_review_records = records
+                st.rerun()
+        properties_text = st.text_area(
+            "Corrected properties (JSON object)",
+            value=json.dumps(record.get("reviewed_properties") or {}, ensure_ascii=False, indent=2),
+            height=220,
+            key=f"review_props_{selected_id}"
+        )
+        status = st.selectbox("Review status", options=REVIEW_STATUSES, index=REVIEW_STATUSES.index(record.get("status", "New")), key=f"review_status_{selected_id}")
+        notes = st.text_area("Reviewer notes", value=record.get("notes", ""), key=f"review_notes_{selected_id}")
+        if st.button("Save review", type="primary", key="save_chatmap_review"):
+            try:
+                corrected = json.loads(properties_text)
+                if not isinstance(corrected, dict):
+                    raise ValueError("Corrected properties must be a JSON object.")
+                if status == "Verified" and record.get("conflict"):
+                    raise ValueError("Resolve the incoming-source conflict before marking this record Verified.")
+                record["reviewed_properties"] = corrected
+                record["status"] = status
+                record["notes"] = notes
+                st.session_state.chatmap_review_records = records
+                st.success("Review saved for this session. Download the ledger below to preserve it across sessions.")
+            except (json.JSONDecodeError, ValueError) as exc:
+                st.error(f"Review not saved: {exc}")
+
+    with st.expander("D. Preview and export", expanded=True):
+        publishable = reviewed_geojson(records)
+        st.write(f"**Publishable verified records:** {len(publishable['features'])} / {len(records)}")
+        st.dataframe(pd.DataFrame([
+            {"Report ID": rid, "Status": rec.get("status"), "Conflict": bool(rec.get("conflict")), "Notes": rec.get("notes", "")}
+            for rid, rec in records.items()
+        ]), use_container_width=True)
+        if publishable["features"]:
+            st.json(publishable)
+        else:
+            st.warning("Nothing is eligible for publication yet. Only Verified, conflict-free records are exported.")
+        st.download_button(
+            "Download verified-only GeoJSON for uMap",
+            data=json.dumps(publishable, ensure_ascii=False, indent=2).encode("utf-8"),
+            file_name="verified_for_umap.geojson",
+            mime="application/geo+json",
+            disabled=not bool(publishable["features"]),
+            key="download_verified_chatmap_geojson"
+        )
+        st.download_button(
+            "Download review ledger backup",
+            data=json.dumps(working_ledger_geojson(records), ensure_ascii=False, indent=2).encode("utf-8"),
+            file_name="chatmap_review_ledger.json",
+            mime="application/json",
+            key="download_chatmap_review_ledger"
+        )
+        st.caption("The ledger is the review history/working copy. Keep it with your project files. The app intentionally does not push to a uMap server because no map exists yet and authenticated write behavior has not been verified.")
