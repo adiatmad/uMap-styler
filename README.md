@@ -46,7 +46,7 @@ The **ChatMap → Review → Publish to uMap** section supports a deliberate, hu
 1. In [ChatMap](https://chatmap.hotosm.org/), upload the exported WhatsApp/Telegram/Signal chat archive and download its GeoJSON.
 2. Upload that GeoJSON in this app. Re-imports are compared with the current review ledger.
 3. Review each report, edit its properties as JSON, add reviewer notes, and set its status to `New`, `Needs correction`, `Verified`, or `Rejected`.
-4. Download **verified-only GeoJSON** and upload it to the uMap map you create for the project.
+4. Download **verified-only GeoJSON**. If this is the first publication, open [HOT uMap](https://umap.hotosm.org/), sign in, create and save a map, then import the GeoJSON in the map editor. Inspect the features and extent before saving/sharing.
 5. Download the **review ledger backup** after changes and keep it with the project. Upload that ledger in a later session to continue reviewing.
 
 ### Safety and synchronization limits
@@ -54,7 +54,7 @@ The **ChatMap → Review → Publish to uMap** section supports a deliberate, hu
 - Only records marked `Verified` and without an unresolved source conflict are included in the publishable GeoJSON.
 - Changed records are flagged for re-review instead of silently replacing corrected data. Where a ChatMap feature has no stable ID, the importer uses an unambiguous matching geometry as a fallback; reports at shared locations can be ambiguous and must be checked by a human.
 - The review ledger is the working record. The verified-only GeoJSON is a publication snapshot, not an automatic sync.
-- **This version does not write directly to HOT uMap.** The project map has not yet been created, and authenticated create/update behavior has not been verified. Create the map in [HOT uMap](https://umap.hotosm.org/), upload the reviewed GeoJSON through the uMap interface, and inspect the result before sharing it. Do not upload the review ledger to uMap.
+- **This version does not write directly to HOT uMap.** The project map has not yet been created, and authenticated create/update behavior has not been verified. Create the map in [HOT uMap](https://umap.hotosm.org/), import the verified-only GeoJSON through the map editor, and inspect the result before sharing it. Do not upload the review ledger to uMap.
 - ChatMap exports can include personal names, messages, coordinates, and media links. Check consent, data minimization, and public visibility before publishing.
 
 ### Tests
