@@ -8,6 +8,7 @@ import pandas as pd
 import json
 import io
 import re
+import html as html_lib
 from typing import List, Dict, Any
 
 st.set_page_config(page_title="GeoJSON ↔ CSV Bulk Editor", layout="wide")
