@@ -597,7 +597,6 @@ st.write("**✨ Complete GeoJSON ↔ CSV Editor with Bulk HTML Styling**")
 # --------------------------
 import copy
 import hashlib
-import html as html_lib
 
 REVIEW_STATUSES = ("New", "Needs correction", "Verified", "Rejected")
 _REVIEW_KEYS = {"_review_id", "_review_status", "_review_notes", "_source_fingerprint", "_source_snapshot", "_reviewed_properties"}
@@ -610,9 +609,6 @@ def _fingerprint(value):
 
 def _source_properties(feature):
     return {k: v for k, v in (feature.get("properties") or {}).items() if k not in _REVIEW_KEYS}
-
-def _geometry_key(feature):
-    return _fingerprint(feature.get("geometry"))
 
 def _source_snapshot(feature):
     return {"geometry": feature.get("geometry"), "properties": _source_properties(feature)}
