@@ -76,3 +76,14 @@ python -m unittest discover -s tests -v
 ```
 
 The tests load only pure helper functions from `app.py` so Streamlit UI startup is not required.
+
+### Local Indonesian-English spelling review
+
+The ChatMap text-quality panel can run a local, suggestion-only spelling scan using the bundled Indonesian Hunspell dictionary and the English dictionary provided by pyspellchecker. It does not send report text to an external service. Capitalized tokens are skipped conservatively to reduce false positives for names and places; add local/regional terms, acronyms, and project vocabulary to the vocabulary list. Vocabulary is kept in the current app session, so save a copy for reuse.
+
+- Every suggestion shows original and proposed text; nothing is auto-corrected.
+- Approving a suggestion edits only that one record's reviewed copy and moves it to Needs correction.
+- Source properties and geometry are preserved; conflicted and rejected records are not eligible.
+- A missing suggestion does not mean the text is correct. Grammar, context, and many proper nouns require human review.
+
+The Indonesian Hunspell files in dictionaries/ are from shuLhan/hunspell-id (https://github.com/shuLhan/hunspell-id), distributed under LGPL-3.0-or-later; the upstream license text is included alongside the dictionary. The English dictionary is provided by pyspellchecker. See the upstream projects for license and attribution details.

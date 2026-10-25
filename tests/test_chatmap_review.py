@@ -19,12 +19,14 @@ HELPERS = {
     "promote_incoming_source", "reviewed_geojson", "working_ledger_geojson",
     "load_working_ledger", "normalize_review_text", "inspect_text_quality",
     "find_text_inconsistencies", "apply_approved_text_replacements", "apply_approved_whitespace_cleanup",
+    "spellcheck_text", "spellcheck_properties", "apply_approved_spellcheck_finding",
 }
 NAMESPACE = {
     "json": json, "hashlib": hashlib, "copy": copy,
     "REVIEW_STATUSES": ("New", "Needs correction", "Verified", "Rejected"),
     "html_lib": html, "re": re,
     "difflib": __import__("difflib"),
+    "__file__": str(APP_PATH),
     "_REVIEW_KEYS": {"_review_id", "_review_status", "_review_notes",
                      "_source_fingerprint", "_source_snapshot", "_reviewed_properties"},
 }
@@ -32,6 +34,14 @@ tree = ast.parse(APP_PATH.read_text(encoding="utf-8"))
 nodes = [node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in HELPERS]
 exec(compile(ast.Module(body=nodes, type_ignores=[]), str(APP_PATH), "exec"), NAMESPACE)
 
+
+
+def load_real_spellcheck_engines():
+    from pathlib import Path
+    from spylls.hunspell import Dictionary
+    from spellchecker import SpellChecker
+    prefix = Path(__file__).resolve().parents[1] / "dictionaries" / "id_ID"
+    return Dictionary.from_files(str(prefix)), SpellChecker(language="en")
 
 def load_html_renderer():
     tree = ast.parse(APP_PATH.read_text(encoding="utf-8"))
@@ -209,6 +219,36 @@ class TextQualityReviewTests(unittest.TestCase):
         self.assertEqual(records["3"]["reviewed_properties"]["description"], "  Sampah   plastik ")
         self.assertEqual(records["4"]["reviewed_properties"]["description"], "  Sampah   plastik ")
         self.assertEqual(records["1"]["source"]["properties"]["description"], "  Sampah   plastik ")
+
+
+    def test_spellcheck_suggests_indonesian_typo_without_mutating_properties(self):
+        id_dictionary, english_checker = load_real_spellcheck_engines()
+        props = {"description": "sampah plstik di sungai"}
+        snapshot = copy.deepcopy(props)
+        findings = NAMESPACE["spellcheck_properties"](props, id_dictionary, english_checker, ["Kaliwlingi"])
+        self.assertEqual(props, snapshot)
+        self.assertTrue(any("plastik" in item["suggestion"].casefold() for item in findings))
+
+    def test_spellcheck_skips_project_vocabulary_and_capitalized_names(self):
+        id_dictionary, english_checker = load_real_spellcheck_engines()
+        findings = NAMESPACE["spellcheck_text"]("Kaliwlingi Mangrovesari WhatsApp", id_dictionary, english_checker, ["Kaliwlingi", "Mangrovesari", "WhatsApp"])
+        self.assertEqual(findings, [])
+
+    def test_approved_spellcheck_edits_one_record_and_preserves_source(self):
+        records = {
+            "one": {"source": {"properties": {"description": "sampah plstik"}}, "reviewed_properties": {"description": "sampah plstik"}, "status": "Verified", "conflict": False},
+            "two": {"source": {"properties": {"description": "sampah plstik"}}, "reviewed_properties": {"description": "sampah plstik"}, "status": "Verified", "conflict": False},
+            "three": {"reviewed_properties": {"description": "sampah plstik"}, "status": "Verified", "conflict": True},
+            "four": {"reviewed_properties": {"description": "sampah plstik"}, "status": "Rejected", "conflict": False},
+        }
+        apply_one = NAMESPACE["apply_approved_spellcheck_finding"]
+        self.assertTrue(apply_one(records, "one", "description", "sampah plstik", "sampah plastik"))
+        self.assertFalse(apply_one(records, "two", "description", "sampah plstik", "sampah plastik"))
+        self.assertFalse(apply_one(records, "three", "description", "sampah plstik", "sampah plastik"))
+        self.assertFalse(apply_one(records, "four", "description", "sampah plstik", "sampah plastik"))
+        self.assertEqual(records["one"]["status"], "Needs correction")
+        self.assertEqual(records["one"]["source"]["properties"]["description"], "sampah plstik")
+        self.assertEqual(records["two"]["reviewed_properties"]["description"], "sampah plstik")
 
     def test_bulk_replacement_rejects_invalid_inputs(self):
         records = {"1": {"reviewed_properties": {"category": "old"}, "status": "New", "conflict": False}}

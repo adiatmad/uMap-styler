@@ -913,6 +913,101 @@ def apply_approved_whitespace_cleanup(records):
             changed_records += 1
     return changed_records
 
+def load_spellcheck_engines():
+    """Load local Indonesian Hunspell and bundled English spellcheck engines."""
+    from pathlib import Path
+    from spylls.hunspell import Dictionary
+    from spellchecker import SpellChecker
+    dictionary_prefix = Path(__file__).resolve().parent / "dictionaries" / "id_ID"
+    if not dictionary_prefix.with_suffix(".dic").is_file() or not dictionary_prefix.with_suffix(".aff").is_file():
+        raise FileNotFoundError("Indonesian Hunspell dictionary files are missing.")
+    return Dictionary.from_files(str(dictionary_prefix)), SpellChecker(language="en")
+
+
+def spellcheck_text(value, id_dictionary, english_checker, custom_words=None):
+    """Return conservative spelling suggestions without mutating text."""
+    if not isinstance(value, str) or not value.strip():
+        return []
+    safe_words = {str(word).strip().casefold() for word in (custom_words or []) if str(word).strip()}
+    token_pattern = re.compile(r"(?<![\\w])([^\\W\\d_][^\\W\\d_'-]*)(?![\\w])", re.UNICODE)
+    findings = []
+    for match in token_pattern.finditer(value):
+        token = match.group(1)
+        folded = token.casefold()
+        if len(token) < 4 or folded in safe_words or token.isupper() or token[0].isupper():
+            continue
+        try:
+            known_id = bool(id_dictionary.lookup(token))
+        except Exception:
+            known_id = False
+        try:
+            known_en = bool(english_checker.known([token]))
+        except Exception:
+            known_en = False
+        if known_id or known_en:
+            continue
+        candidates = []
+        try:
+            candidates.extend(id_dictionary.suggest(token)[:5])
+        except Exception:
+            pass
+        try:
+            candidate = english_checker.correction(token)
+            if candidate:
+                candidates.append(candidate)
+        except Exception:
+            pass
+        unique = []
+        for candidate in candidates:
+            if isinstance(candidate, str) and candidate.casefold() != folded and candidate.casefold() not in safe_words and candidate.casefold() not in {x.casefold() for x in unique}:
+                unique.append(candidate)
+        if not unique:
+            continue
+        import difflib
+        ranked = sorted(unique, key=lambda item: difflib.SequenceMatcher(None, folded, item.casefold()).ratio(), reverse=True)
+        suggestion = ranked[0]
+        similarity = difflib.SequenceMatcher(None, folded, suggestion.casefold()).ratio()
+        if similarity < 0.72:
+            continue
+        findings.append({"token": token, "suggestion_token": suggestion, "similarity": round(similarity, 3), "start": match.start(1), "end": match.end(1)})
+    return findings
+
+
+def spellcheck_properties(properties, id_dictionary, english_checker, custom_words=None):
+    """Return field-level suggestions without changing input properties."""
+    if not isinstance(properties, dict):
+        return []
+    findings = []
+    for field, value in properties.items():
+        if not isinstance(value, str) or not value.strip():
+            continue
+        tokens = spellcheck_text(value, id_dictionary, english_checker, custom_words)
+        if not tokens:
+            continue
+        corrected = value
+        for item in reversed(tokens):
+            corrected = corrected[:item["start"]] + item["suggestion_token"] + corrected[item["end"]:]
+        findings.append({"field": str(field), "original": value, "suggestion": corrected, "tokens": [item["token"] for item in tokens], "token_suggestions": [item["suggestion_token"] for item in tokens]})
+    return findings
+
+
+def apply_approved_spellcheck_finding(records, rid, field, original, suggestion):
+    """Apply one explicit correction to one review copy, never the source."""
+    if not isinstance(field, str) or not field.strip():
+        raise ValueError("A field name is required.")
+    if not isinstance(original, str) or not isinstance(suggestion, str) or not suggestion.strip():
+        raise ValueError("Original and non-empty suggestion text are required.")
+    record = (records or {}).get(rid)
+    if not isinstance(record, dict) or record.get("conflict") or record.get("status") == "Rejected":
+        return False
+    properties = record.get("reviewed_properties")
+    if not isinstance(properties, dict) or properties.get(field) != original or original == suggestion:
+        return False
+    properties[field] = suggestion
+    record["status"] = "Needs correction"
+    return True
+
+
 def _parse_chatmap_geojson(upload):
     try:
         data = json.loads(upload.getvalue().decode("utf-8-sig"))
@@ -975,6 +1070,69 @@ if active_workspace == "ChatMap review":
                         })
                 st.session_state.chatmap_text_quality_issues = issue_rows
                 st.session_state.chatmap_text_quality_findings = find_text_inconsistencies(records)
+
+            st.markdown("**Indonesian + English spelling suggestions**")
+            st.caption("Local dictionary checks only. Capitalized words, acronyms, and project-vocabulary terms are skipped conservatively. Nothing changes until you approve a suggestion.")
+            vocabulary_text = st.text_area(
+                "Project vocabulary (one word per line)",
+                value=st.session_state.get("chatmap_project_vocabulary_text", "Kaliwlingi\\nBrebes\\nChatMap\\nuMap\\nWhatsApp\\nMangrovesari"),
+                height=100, key="chatmap_project_vocabulary_editor",
+                help="Add place names, local terms, abbreviations, and valid regional words to reduce false positives."
+            )
+            st.session_state.chatmap_project_vocabulary_text = vocabulary_text
+            custom_words = [word.strip() for word in re.split(r"[\\n,;]+", vocabulary_text) if word.strip()]
+            scan_spelling = st.button("Scan Indonesian + English spelling", key="chatmap_spellcheck_scan", type="primary")
+            clear_spelling = st.button("Clear spelling results", key="chatmap_spellcheck_clear")
+            if clear_spelling:
+                st.session_state.pop("chatmap_spellcheck_findings", None)
+                st.rerun()
+            if scan_spelling:
+                try:
+                    if "chatmap_spellcheck_engines" not in st.session_state:
+                        st.session_state.chatmap_spellcheck_engines = load_spellcheck_engines()
+                    id_dictionary, english_checker = st.session_state.chatmap_spellcheck_engines
+                    spell_rows = []
+                    for rid, rec in records.items():
+                        if rec.get("conflict") or rec.get("status") == "Rejected":
+                            continue
+                        for finding in spellcheck_properties(rec.get("reviewed_properties") or {}, id_dictionary, english_checker, custom_words):
+                            spell_rows.append({"report_id": rid, **finding})
+                    st.session_state.chatmap_spellcheck_findings = spell_rows
+                    st.success(f"Spelling scan complete: {len(spell_rows)} field(s) need human review. No data was changed.")
+                except Exception as exc:
+                    st.error(f"Local spelling engine could not start: {exc}")
+            if "chatmap_spellcheck_findings" in st.session_state:
+                spell_rows = st.session_state.chatmap_spellcheck_findings
+                if not spell_rows:
+                    st.success("No spelling suggestions found. This does not guarantee spelling or grammar is correct.")
+                else:
+                    st.write(f"**Spelling suggestions awaiting review: {len(spell_rows)}**")
+                    for row_index, row in enumerate(spell_rows):
+                        rid = row["report_id"]
+                        with st.container(border=True):
+                            st.markdown(f"**Report:** {rid} · **Field:** {row['field']}")
+                            st.write("Original")
+                            st.code(row["original"], language=None)
+                            st.write("Suggested")
+                            st.code(row["suggestion"], language=None)
+                            st.caption("Possible tokens: " + ", ".join(row["tokens"]))
+                            if st.button("Approve this correction", key=f"approve_spell_{row_index}_{_fingerprint([rid, row['field'], row['original']])[:8]}"):
+                                applied = apply_approved_spellcheck_finding(records, rid, row["field"], row["original"], row["suggestion"])
+                                if applied:
+                                    st.session_state.chatmap_review_records = records
+                                    st.session_state.chatmap_spellcheck_findings = [item for item in spell_rows if not (item["report_id"] == rid and item["field"] == row["field"] and item["original"] == row["original"])]
+                                    st.success("Correction applied to this review copy only. The record is now Needs correction.")
+                                    st.rerun()
+                                else:
+                                    st.warning("Not applied: record changed, conflicted/rejected, or no longer eligible. Scan again.")
+                            if st.button("Add flagged words to vocabulary", key=f"vocab_spell_{row_index}_{_fingerprint([rid, row['field'], row['original']])[:8]}"):
+                                existing = {word.casefold() for word in custom_words}
+                                updated = custom_words + [word for word in row["tokens"] if word.casefold() not in existing]
+                                st.session_state.chatmap_project_vocabulary_text = "\\n".join(updated)
+                                st.session_state.chatmap_spellcheck_findings = [item for item in spell_rows if not (item["report_id"] == rid and item["field"] == row["field"] and item["original"] == row["original"])]
+                                st.info("Added to this session's vocabulary. Re-run the scan to check remaining text.")
+                                st.rerun()
+
             if "chatmap_text_quality_issues" in st.session_state:
                 issue_rows = st.session_state.chatmap_text_quality_issues
                 if issue_rows:
