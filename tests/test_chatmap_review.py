@@ -241,7 +241,7 @@ class TextQualityReviewTests(unittest.TestCase):
 
     def test_approved_spellcheck_edits_one_record_and_preserves_source(self):
         records = {
-            "one": {"source": {"properties": {"description": "sampah plstik"}}, "reviewed_properties": {"description": "sampah plstik"}, "status": "Verified", "conflict": False},
+            "one": {"source": {"geometry": {"type": "Point", "coordinates": [109.0, -6.8]}, "properties": {"description": "sampah plstik"}}, "reviewed_properties": {"description": "sampah plstik"}, "status": "Verified", "conflict": False},
             "two": {"source": {"properties": {"description": "sampah plstik"}}, "reviewed_properties": {"description": "sampah plstik"}, "status": "Verified", "conflict": False},
             "three": {"reviewed_properties": {"description": "sampah plstik"}, "status": "Verified", "conflict": True},
             "four": {"reviewed_properties": {"description": "sampah plstik"}, "status": "Rejected", "conflict": False},
@@ -253,6 +253,8 @@ class TextQualityReviewTests(unittest.TestCase):
         self.assertFalse(apply_one(records, "four", "description", "sampah plstik", "sampah plastik"))
         self.assertEqual(records["one"]["status"], "Needs correction")
         self.assertEqual(records["one"]["source"]["properties"]["description"], "sampah plstik")
+        self.assertEqual(records["one"]["source"]["geometry"], {"type": "Point", "coordinates": [109.0, -6.8]})
+        self.assertFalse(apply_one(records, "one", "description", "sampah plstik", "sampah plastik"))
         self.assertEqual(records["two"]["reviewed_properties"]["description"], "sampah plstik")
         self.assertEqual(records["two"]["status"], "Verified")
 
