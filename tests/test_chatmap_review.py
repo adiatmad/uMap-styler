@@ -239,6 +239,12 @@ class TextQualityReviewTests(unittest.TestCase):
         findings = NAMESPACE["spellcheck_text"]("Kaliwlingi Mangrovesari WhatsApp", id_dictionary, english_checker, ["Kaliwlingi", "Mangrovesari", "WhatsApp"])
         self.assertEqual(findings, [])
 
+    def test_spellcheck_ignores_urls_emails_and_structured_reference_ids(self):
+        id_dictionary, english_checker = load_real_spellcheck_engines()
+        text = "See https://kaliwlingi.example.org/wastemap and mail team@example.org; ref:ABC-123 task_9XK2."
+        findings = NAMESPACE["spellcheck_text"](text, id_dictionary, english_checker)
+        self.assertEqual(findings, [])
+
     def test_approved_spellcheck_edits_one_record_and_preserves_source(self):
         records = {
             "one": {"source": {"geometry": {"type": "Point", "coordinates": [109.0, -6.8]}, "properties": {"description": "sampah plstik"}}, "reviewed_properties": {"description": "sampah plstik"}, "status": "Verified", "conflict": False},

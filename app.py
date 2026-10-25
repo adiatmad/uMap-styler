@@ -930,8 +930,18 @@ def spellcheck_text(value, id_dictionary, english_checker, custom_words=None):
         return []
     safe_words = {str(word).strip().casefold() for word in (custom_words or []) if str(word).strip()}
     token_pattern = re.compile(r"(?<![\w])([^\W\d_][^\W\d_'-]*)(?![\w])", re.UNICODE)
+    # URLs, email addresses, and common structured reference IDs are not prose.
+    protected_pattern = re.compile(
+        r"(?:https?://|www\\.)[^\\s<>]+"
+        r"|\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b"
+        r"|\\b(?:id|uuid|ref|code|ticket|task)[\\s:_#-]*[A-Z0-9][A-Z0-9_-]{2,}\\b",
+        re.IGNORECASE,
+    )
+    protected_spans = [match.span() for match in protected_pattern.finditer(value)]
     findings = []
     for match in token_pattern.finditer(value):
+        if any(start <= match.start(1) and match.end(1) <= end for start, end in protected_spans):
+            continue
         token = match.group(1)
         folded = token.casefold()
         if len(token) < 4 or folded in safe_words or token.isupper() or token[0].isupper():
