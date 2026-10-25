@@ -758,6 +758,7 @@ def _parse_chatmap_geojson(upload):
 st.markdown("---")
 st.header("♻️ ChatMap → Review → Publish to uMap")
 st.caption("Manual, review-gated workflow for Brebes or another project. This does not automatically publish to HOT uMap.")
+st.markdown("**First-time uMap setup:** Open [HOT uMap](https://umap.hotosm.org/), sign in, create a new map, and save it. In the map editor, use the data import/upload control to import the verified-only `.geojson` file, check the map extent and features, then save. Keep the map URL and review-ledger backup with the project. Menu labels may differ slightly by uMap version.")
 st.info("1. Export/download GeoJSON from ChatMap. 2. Import it here. 3. Review and correct records. 4. Download the verified-only GeoJSON. 5. Upload that file to your uMap map. Re-imports are compared against the saved review ledger.")
 
 if "chatmap_review_records" not in st.session_state:
@@ -844,7 +845,7 @@ if records:
         st.download_button(
             "Download verified-only GeoJSON for uMap",
             data=json.dumps(publishable, ensure_ascii=False, indent=2).encode("utf-8"),
-            file_name="brebes_verified_for_umap.geojson",
+            file_name="verified_for_umap.geojson",
             mime="application/geo+json",
             disabled=not bool(publishable["features"]),
             key="download_verified_chatmap_geojson"
