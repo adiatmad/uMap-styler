@@ -6,13 +6,14 @@ pure helper-function AST nodes for deterministic unit tests.
 import ast
 import copy
 import hashlib
+import html
 import json
 import unittest
 from pathlib import Path
 
 APP_PATH = Path(__file__).resolve().parents[1] / "app.py"
 HELPERS = {
-    "_canonical_json", "_fingerprint", "_source_properties", "_geometry_key",
+    "_canonical_json", "_fingerprint", "_source_properties",
     "_source_snapshot", "_review_id", "import_chatmap_geojson",
     "promote_incoming_source", "reviewed_geojson", "working_ledger_geojson",
     "load_working_ledger",
@@ -20,12 +21,21 @@ HELPERS = {
 NAMESPACE = {
     "json": json, "hashlib": hashlib, "copy": copy,
     "REVIEW_STATUSES": ("New", "Needs correction", "Verified", "Rejected"),
+    "html_lib": html,
     "_REVIEW_KEYS": {"_review_id", "_review_status", "_review_notes",
                      "_source_fingerprint", "_source_snapshot", "_reviewed_properties"},
 }
 tree = ast.parse(APP_PATH.read_text(encoding="utf-8"))
 nodes = [node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in HELPERS]
 exec(compile(ast.Module(body=nodes, type_ignores=[]), str(APP_PATH), "exec"), NAMESPACE)
+
+
+def load_html_renderer():
+    tree = ast.parse(APP_PATH.read_text(encoding="utf-8"))
+    function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "create_universal_html")
+    namespace = {"html_lib": html}
+    exec(compile(ast.Module(body=[function], type_ignores=[]), str(APP_PATH), "exec"), namespace)
+    return namespace["create_universal_html"]
 
 def feature(text="sampah menumpuk", coordinates=None, props=None, fid=None):
     properties = {"description": text, **(props or {})}
@@ -43,6 +53,14 @@ class ChatMapReviewTests(unittest.TestCase):
     def setUp(self):
         self.importer = NAMESPACE["import_chatmap_geojson"]
         self.publish = NAMESPACE["reviewed_geojson"]
+
+
+    def test_html_renderer_escapes_untrusted_names_and_values(self):
+        rendered = load_html_renderer()({"<script>alert(1)</script>": "<img src=x onerror=alert(1)>"})
+        self.assertNotIn("<script>", rendered)
+        self.assertNotIn("<img src=x", rendered)
+        self.assertIn("&lt;script&gt;", rendered)
+        self.assertIn("&lt;img", rendered)
 
     def test_valid_import_and_repeat_is_idempotent(self):
         ledger, counts = self.importer(collection(feature()))
