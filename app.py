@@ -1016,6 +1016,26 @@ def apply_approved_spellcheck_finding(records, rid, field, original, suggestion)
     return True
 
 
+def merge_project_vocabulary(existing_text, additions):
+    """Merge reviewer-approved vocabulary terms without duplicates."""
+    existing = [word.strip() for word in re.split(r"[\\n,;]+", str(existing_text or "")) if word.strip()]
+    seen = {word.casefold() for word in existing}
+    for raw_word in additions or []:
+        word = str(raw_word).strip()
+        if word and word.casefold() not in seen:
+            existing.append(word)
+            seen.add(word.casefold())
+    return "\\n".join(existing)
+
+
+def _add_spellcheck_words_to_vocabulary(words):
+    """Update vocabulary widget state in Streamlit's pre-rerun callback."""
+    current = st.session_state.get("chatmap_project_vocabulary_editor", "")
+    merged = merge_project_vocabulary(current, words)
+    st.session_state["chatmap_project_vocabulary_editor"] = merged
+    st.session_state["chatmap_project_vocabulary_text"] = merged
+
+
 def _parse_chatmap_geojson(upload):
     try:
         data = json.loads(upload.getvalue().decode("utf-8-sig"))
@@ -1133,14 +1153,13 @@ if active_workspace == "ChatMap review":
                                     st.rerun()
                                 else:
                                     st.warning("Not applied: record changed, conflicted/rejected, or no longer eligible. Scan again.")
-                            if st.button("Add flagged words to vocabulary", key=f"vocab_spell_{row_index}_{_fingerprint([rid, row['field'], row['original']])[:8]}"):
-                                existing = {word.casefold() for word in custom_words}
-                                updated = custom_words + [word for word in row["tokens"] if word.casefold() not in existing]
-                                st.session_state.chatmap_project_vocabulary_text = "\n".join(updated)
-                                st.session_state.chatmap_project_vocabulary_editor = st.session_state.chatmap_project_vocabulary_text
-                                st.session_state.chatmap_spellcheck_findings = [item for item in spell_rows if not (item["report_id"] == rid and item["field"] == row["field"] and item["original"] == row["original"])]
-                                st.info("Added to this session's vocabulary. Re-run the scan to check remaining text.")
-                                st.rerun()
+                            st.button(
+                                "Add flagged words to vocabulary",
+                                key=f"vocab_spell_{row_index}_{_fingerprint([rid, row['field'], row['original']])[:8]}",
+                                on_click=_add_spellcheck_words_to_vocabulary,
+                                args=(row["tokens"],),
+                                help="Adds the flagged tokens to the editable vocabulary above."
+                            )
 
             if "chatmap_text_quality_issues" in st.session_state:
                 issue_rows = st.session_state.chatmap_text_quality_issues

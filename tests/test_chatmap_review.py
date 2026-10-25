@@ -19,7 +19,7 @@ HELPERS = {
     "promote_incoming_source", "reviewed_geojson", "working_ledger_geojson",
     "load_working_ledger", "normalize_review_text", "inspect_text_quality",
     "find_text_inconsistencies", "apply_approved_text_replacements", "apply_approved_whitespace_cleanup",
-    "spellcheck_text", "spellcheck_properties", "apply_approved_spellcheck_finding",
+    "spellcheck_text", "spellcheck_properties", "apply_approved_spellcheck_finding", "merge_project_vocabulary",
 }
 NAMESPACE = {
     "json": json, "hashlib": hashlib, "copy": copy,
@@ -228,6 +228,11 @@ class TextQualityReviewTests(unittest.TestCase):
         findings = NAMESPACE["spellcheck_properties"](props, id_dictionary, english_checker, ["Kaliwlingi"])
         self.assertEqual(props, snapshot)
         self.assertTrue(any("plastik" in item["suggestion"].casefold() for item in findings))
+
+
+    def test_project_vocabulary_merge_is_case_insensitive_and_preserves_existing_terms(self):
+        merged = NAMESPACE["merge_project_vocabulary"]("Kaliwlingi\\nBrebes", ["brebes", "Plastik", "plastik", ""])
+        self.assertEqual(merged.splitlines(), ["Kaliwlingi", "Brebes", "Plastik"])
 
     def test_spellcheck_skips_project_vocabulary_and_capitalized_names(self):
         id_dictionary, english_checker = load_real_spellcheck_engines()
