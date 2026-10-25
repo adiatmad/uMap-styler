@@ -667,7 +667,11 @@ def import_chatmap_geojson(geojson, existing_records=None):
             rid = rid + "-" + _fingerprint(source)[:8]
         seen_in_import.add(rid)
         fingerprint = _fingerprint(source)
-        if rid not in records:
+        has_explicit_id = (
+            feature.get("id") not in (None, "")
+            or any(props.get(key) not in (None, "") for key in ("report_id", "message_id", "chatmap_id", "uuid", "id"))
+        )
+        if rid not in records and not has_explicit_id:
             # ChatMap exports may omit stable feature IDs. Match an otherwise-unmatched
             # report at the same geometry so changed text/media is flagged as a conflict
             # rather than imported as a second report. Ambiguous shared locations are
