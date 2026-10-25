@@ -746,6 +746,140 @@ def load_working_ledger(data):
             raise ValueError(f"Invalid source or reviewed properties for {rid!r}.")
     return copy.deepcopy(records)
 
+
+def normalize_review_text(value):
+    """Conservative whitespace-only normalization; preserve spelling and casing."""
+    if not isinstance(value, str):
+        return value
+    return re.sub(r"\\s+", " ", value).strip()
+
+
+def inspect_text_quality(properties):
+    """Return possible whitespace issues without mutating the source properties."""
+    if not isinstance(properties, dict):
+        return []
+    findings = []
+    for field, value in properties.items():
+        if not isinstance(value, str):
+            continue
+        suggestion = normalize_review_text(value)
+        if value != suggestion:
+            findings.append({
+                "field": str(field),
+                "issue": "blank_text" if not suggestion and value else "whitespace",
+                "original": value,
+                "suggestion": suggestion,
+                "severity": "review"
+            })
+    return findings
+
+
+def find_text_inconsistencies(records, threshold=0.88):
+    """Suggest same-field text variants; similarity is not semantic proof."""
+    import difflib
+    from collections import Counter, defaultdict
+
+    if not isinstance(threshold, (int, float)) or threshold < 0.5 or threshold > 1:
+        raise ValueError("Similarity threshold must be between 0.5 and 1.0.")
+    values_by_field = defaultdict(list)
+    for record in (records or {}).values():
+        properties = record.get("reviewed_properties") or {}
+        if record.get("conflict") or not isinstance(properties, dict):
+            continue
+        for field, value in properties.items():
+            if isinstance(value, str) and normalize_review_text(value):
+                values_by_field[str(field)].append(value)
+
+    findings = []
+    for field, values in values_by_field.items():
+        counts = Counter(values)
+        unique_values = sorted(counts)
+        formatting_groups = defaultdict(list)
+        for value in unique_values:
+            formatting_groups[normalize_review_text(value).casefold()].append(value)
+        consumed_pairs = set()
+        for group in formatting_groups.values():
+            if len(group) < 2:
+                continue
+            canonical = sorted(group, key=lambda item: (-counts[item], item.casefold(), item))[0]
+            findings.append({
+                "field": field, "kind": "formatting", "values": group,
+                "counts": {item: counts[item] for item in group},
+                "canonical": canonical, "similarity": 1.0
+            })
+            for i, left in enumerate(group):
+                for right in group[i + 1:]:
+                    consumed_pairs.add(tuple(sorted((left, right))))
+
+        for i, left in enumerate(unique_values):
+            left_norm = normalize_review_text(left).casefold()
+            if len(left_norm) < 5:
+                continue
+            for right in unique_values[i + 1:]:
+                right_norm = normalize_review_text(right).casefold()
+                pair = tuple(sorted((left, right)))
+                if pair in consumed_pairs or len(right_norm) < 5:
+                    continue
+                similarity = difflib.SequenceMatcher(None, left_norm, right_norm).ratio()
+                if similarity < threshold:
+                    continue
+                canonical = sorted((left, right), key=lambda item: (-counts[item], item.casefold(), item))[0]
+                findings.append({
+                    "field": field, "kind": "possible_typo", "values": [left, right],
+                    "counts": {left: counts[left], right: counts[right]},
+                    "canonical": canonical, "similarity": round(similarity, 3)
+                })
+    findings.sort(key=lambda item: (item["field"].casefold(), item["kind"], -item["similarity"], item["values"]))
+    return findings
+
+
+def apply_approved_text_replacements(records, field, replacements):
+    """Apply an explicitly approved exact-value mapping to review copies only."""
+    if not isinstance(field, str) or not field.strip():
+        raise ValueError("A non-empty property field is required.")
+    if not isinstance(replacements, dict) or not replacements:
+        raise ValueError("Provide at least one approved old-value to new-value mapping.")
+    for old, new in replacements.items():
+        if not isinstance(old, str) or not isinstance(new, str) or not old or not new.strip():
+            raise ValueError("Replacement values must be non-empty text.")
+    changed_records = 0
+    for record in (records or {}).values():
+        if record.get("conflict") or record.get("status") == "Rejected":
+            continue
+        properties = record.get("reviewed_properties")
+        if not isinstance(properties, dict):
+            continue
+        old_value = properties.get(field)
+        if isinstance(old_value, str) and old_value in replacements:
+            new_value = replacements[old_value]
+            if new_value != old_value:
+                properties[field] = new_value
+                record["status"] = "Needs correction"
+                changed_records += 1
+    return changed_records
+
+
+def apply_approved_whitespace_cleanup(records):
+    """Apply only whitespace cleanup after explicit user approval."""
+    changed_records = 0
+    for record in (records or {}).values():
+        if record.get("conflict") or record.get("status") == "Rejected":
+            continue
+        properties = record.get("reviewed_properties")
+        if not isinstance(properties, dict):
+            continue
+        changed = False
+        for field, value in list(properties.items()):
+            if isinstance(value, str):
+                cleaned = normalize_review_text(value)
+                if cleaned != value:
+                    properties[field] = cleaned
+                    changed = True
+        if changed:
+            record["status"] = "Needs correction"
+            changed_records += 1
+    return changed_records
+
 def _parse_chatmap_geojson(upload):
     try:
         data = json.loads(upload.getvalue().decode("utf-8-sig"))
@@ -794,6 +928,75 @@ if records:
     conflict_count = sum(1 for r in records.values() if r.get("conflict"))
     st.caption(f"{conflict_count} record(s) have changed source data awaiting review. Conflicted records cannot be published.")
 
+
+    with st.expander("C. Detect text-quality issues and inconsistent labels", expanded=False):
+        st.caption("Local checks only: whitespace, case/format variants, and similar values within the same field. Similarity is a clue, not proof. No report text is sent to an external service.")
+        if st.button("Scan reviewed text", key="chatmap_text_quality_scan"):
+            issue_rows = []
+            for rid, rec in records.items():
+                for issue in inspect_text_quality(rec.get("reviewed_properties") or {}):
+                    issue_rows.append({
+                        "Report ID": rid, "Field": issue["field"], "Issue": issue["issue"],
+                        "Original": issue["original"], "Suggestion": issue["suggestion"]
+                    })
+            st.session_state.chatmap_text_quality_issues = issue_rows
+            st.session_state.chatmap_text_quality_findings = find_text_inconsistencies(records)
+        if "chatmap_text_quality_issues" in st.session_state:
+            issue_rows = st.session_state.chatmap_text_quality_issues
+            if issue_rows:
+                st.write(f"**Whitespace findings:** {len(issue_rows)}")
+                st.dataframe(pd.DataFrame(issue_rows), use_container_width=True)
+                st.warning("Whitespace cleanup is proposed, not applied automatically.")
+                if st.button("Approve and apply whitespace-only cleanup", key="approve_whitespace_cleanup"):
+                    changed = apply_approved_whitespace_cleanup(records)
+                    st.session_state.chatmap_review_records = records
+                    st.success(f"Applied whitespace cleanup to {changed} eligible record(s). Changed records are now Needs correction and must be reviewed again.")
+                    st.rerun()
+            else:
+                st.success("No whitespace issues found in reviewed text.")
+        if "chatmap_text_quality_findings" in st.session_state:
+            findings = st.session_state.chatmap_text_quality_findings
+            if findings:
+                st.write(f"**Potential inconsistent labels / typos:** {len(findings)}")
+                options = list(range(len(findings)))
+                selected_finding = st.selectbox(
+                    "Choose a suggested cluster",
+                    options=options,
+                    format_func=lambda idx: (
+                        f"{findings[idx]['field']}: {' ↔ '.join(findings[idx]['values'])} "
+                        f"({findings[idx]['kind']}, similarity {findings[idx]['similarity']:.3f})"
+                    ),
+                    key="chatmap_text_cluster_choice"
+                )
+                finding = findings[selected_finding]
+                st.write("Values and counts in this cluster:")
+                st.dataframe(pd.DataFrame([
+                    {"Value": value, "Count": finding["counts"].get(value, 0)}
+                    for value in finding["values"]
+                ]), use_container_width=True)
+                st.caption("Review the context before merging. Similar spelling can represent different places, objects, or meanings.")
+                approved_value = st.text_input(
+                    "Approved canonical value (editable)",
+                    value=finding["canonical"],
+                    key=f"chatmap_canonical_{selected_finding}"
+                )
+                if st.button("Approve this mapping across eligible records", key="apply_text_cluster"):
+                    if not approved_value.strip():
+                        st.error("Canonical value cannot be empty.")
+                    else:
+                        mapping = {value: approved_value for value in finding["values"] if value != approved_value}
+                        try:
+                            changed = apply_approved_text_replacements(records, finding["field"], mapping)
+                            st.session_state.chatmap_review_records = records
+                            st.success(f"Applied the approved mapping to {changed} eligible record(s). Changed records are now Needs correction and must be reviewed again.")
+                            st.rerun()
+                        except ValueError as exc:
+                            st.error(f"Mapping not applied: {exc}")
+            else:
+                st.success("No likely same-field text variants found at the current similarity threshold.")
+        else:
+            st.info("Run the scan to inspect whitespace issues and likely text variants.")
+
     with st.expander("C. Review and correct one report", expanded=True):
         ids = list(records.keys())
         labels = {rid: f"{rid} — {records[rid].get('status', 'New')}" + (" ⚠ conflict" if records[rid].get("conflict") else "") for rid in ids}
@@ -831,7 +1034,7 @@ if records:
             except (json.JSONDecodeError, ValueError) as exc:
                 st.error(f"Review not saved: {exc}")
 
-    with st.expander("D. Preview and export", expanded=True):
+    with st.expander("E. Preview and export", expanded=True):
         publishable = reviewed_geojson(records)
         st.write(f"**Publishable verified records:** {len(publishable['features'])} / {len(records)}")
         st.dataframe(pd.DataFrame([
