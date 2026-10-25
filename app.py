@@ -1075,7 +1075,7 @@ if active_workspace == "ChatMap review":
             st.caption("Local dictionary checks only. Capitalized words, acronyms, and project-vocabulary terms are skipped conservatively. Nothing changes until you approve a suggestion.")
             vocabulary_text = st.text_area(
                 "Project vocabulary (one word per line)",
-                value=st.session_state.get("chatmap_project_vocabulary_text", "Kaliwlingi\\nBrebes\\nChatMap\\nuMap\\nWhatsApp\\nMangrovesari"),
+                value=st.session_state.get("chatmap_project_vocabulary_text", "Kaliwlingi\nBrebes\nChatMap\nuMap\nWhatsApp\nMangrovesari"),
                 height=100, key="chatmap_project_vocabulary_editor",
                 help="Add place names, local terms, abbreviations, and valid regional words to reduce false positives."
             )
