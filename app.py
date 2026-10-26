@@ -21,16 +21,33 @@ st.markdown(
     div[data-testid="stButton"] > button[kind="primary"] {border-radius: .55rem; font-weight: 600;}
     div[data-testid="stDownloadButton"] > button {border-radius: .55rem;}
     div[data-testid="stFileUploader"] {border-radius: .65rem;}
-    .umap-subtitle {font-size: 1.02rem; opacity: .86; max-width: 900px;}
+    .umap-subtitle {font-size: 1.02rem; opacity: .86; max-width: 900px; line-height: 1.65;}
+    .umap-eyebrow {font-size: .74rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; opacity: .68; margin-bottom: -.4rem;}
+    [data-testid="stSidebar"] [data-testid="stRadio"] > label {font-weight: 650;}
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] {gap: .35rem;}
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radio"] {padding: .55rem .65rem; border-radius: .65rem;}
+    [data-testid="stVerticalBlockBorderWrapper"] {border-radius: .85rem;}
+    [data-testid="stMetric"] {border: 1px solid rgba(128,128,128,.16); min-height: 105px;}
+    [data-testid="stMetricLabel"] {font-weight: 650;}
+    div[data-testid="stButton"] > button, div[data-testid="stDownloadButton"] > button {min-height: 2.65rem; transition: border-color .15s ease, transform .15s ease;}
+    div[data-testid="stButton"] > button:hover, div[data-testid="stDownloadButton"] > button:hover {border-color: var(--primary-color); transform: translateY(-1px);}
+    div[data-testid="stFileUploader"] section {border-radius: .75rem;}
+    div[data-testid="stTextArea"] textarea, div[data-testid="stTextInput"] input {border-radius: .55rem;}
+    div[data-testid="stAlert"] {border-radius: .75rem;}
+    .umap-step-label {font-size: .8rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; opacity: .72;}
+    .umap-step-title {font-size: 1.12rem; font-weight: 750; margin: .15rem 0 .4rem 0;}
+    @media (max-width: 700px) { .block-container {padding-top: 1rem; padding-bottom: 2rem;} .umap-subtitle {font-size: .96rem;} }
     </style>
     """,
     unsafe_allow_html=True,
 )
+st.markdown('<p class="umap-eyebrow">Community mapping workflow · ChatMap → review → uMap</p>', unsafe_allow_html=True)
 st.title("🗺️ uMap Styler")
 st.markdown('<p class="umap-subtitle">Prepare community mapping data, review corrections, and export only records approved for publication.</p>', unsafe_allow_html=True)
 
 with st.sidebar:
-    st.markdown("## Workspace")
+    st.markdown("## Your workflow")
+    st.caption("Choose a step. Start with the guide if this is your first visit.")
     active_workspace = st.radio(
         "Choose a workflow",
         options=["Beginner guide", "Review ChatMap reports", "Prepare map for uMap", "Advanced tools"],
@@ -1131,6 +1148,8 @@ if active_workspace in ("Review ChatMap reports", "Prepare map for uMap"):
         
     records = st.session_state.chatmap_review_records
     if active_workspace == "Review ChatMap reports" and records:
+        st.markdown('<p class="umap-step-label">Step 2 of 3 · Review</p>', unsafe_allow_html=True)
+        st.caption("Check each report, resolve change warnings, and save your decision. Only approved reports can move to the map-preparation step.")
         status_counts = {status: sum(1 for r in records.values() if r.get("status") == status) for status in REVIEW_STATUSES}
         status_labels = {
             "New": "Not checked yet",
@@ -1319,6 +1338,7 @@ if active_workspace in ("Review ChatMap reports", "Prepare map for uMap"):
                     st.error(f"Could not save this report: {exc}")
 
 if active_workspace == "Prepare map for uMap":
+    st.markdown('<p class="umap-step-label">Step 3 of 3 · Prepare and export</p>', unsafe_allow_html=True)
     st.header("Prepare your map")
     st.write("Use this page to make a file of approved reports for your uMap map. Nothing is sent to uMap automatically.")
     if not records:
