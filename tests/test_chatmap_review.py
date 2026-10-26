@@ -278,7 +278,7 @@ class WorkspaceNavigationTests(unittest.TestCase):
         self.assertIn('options=["Beginner guide", "Review ChatMap reports", "Prepare map for uMap", "Advanced tools"]', source)
         self.assertIn('index=0,', source)
         self.assertIn('if active_workspace == "Beginner guide":', source)
-        self.assertIn("Welcome — start here", source)
+        self.assertIn("Welcome — Start here", source)
         self.assertIn("You do not need to understand technical terms", source)
 
     def test_review_export_and_legacy_tools_are_separate_workspaces(self):
