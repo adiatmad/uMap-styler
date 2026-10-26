@@ -1120,184 +1120,183 @@ if active_workspace in ("Review ChatMap reports", "Prepare map for uMap"):
                     st.error(f"Import failed: {exc}")
         
     records = st.session_state.chatmap_review_records
-        if active_workspace == "Review ChatMap reports":
-        if records:
-            status_counts = {status: sum(1 for r in records.values() if r.get("status") == status) for status in REVIEW_STATUSES}
-            metric_cols = st.columns(4)
-            for col, status in zip(metric_cols, REVIEW_STATUSES):
-                col.metric(status, status_counts[status])
-            conflict_count = sum(1 for r in records.values() if r.get("conflict"))
-            st.caption(f"{conflict_count} record(s) have changed source data awaiting review. Conflicted records cannot be published.")
-        
-        
-            with st.expander("C. Detect text-quality issues and inconsistent labels", expanded=False):
-                st.caption("Local checks only: whitespace, case/format variants, and similar values within the same field. Similarity is a clue, not proof. No report text is sent to an external service.")
-                if st.button("Scan reviewed text", key="chatmap_text_quality_scan"):
-                    issue_rows = []
+    if active_workspace == "Review ChatMap reports" and records:
+        status_counts = {status: sum(1 for r in records.values() if r.get("status") == status) for status in REVIEW_STATUSES}
+        metric_cols = st.columns(4)
+        for col, status in zip(metric_cols, REVIEW_STATUSES):
+            col.metric(status, status_counts[status])
+        conflict_count = sum(1 for r in records.values() if r.get("conflict"))
+        st.caption(f"{conflict_count} record(s) have changed source data awaiting review. Conflicted records cannot be published.")
+    
+    
+        with st.expander("C. Detect text-quality issues and inconsistent labels", expanded=False):
+            st.caption("Local checks only: whitespace, case/format variants, and similar values within the same field. Similarity is a clue, not proof. No report text is sent to an external service.")
+            if st.button("Scan reviewed text", key="chatmap_text_quality_scan"):
+                issue_rows = []
+                for rid, rec in records.items():
+                    for issue in inspect_text_quality(rec.get("reviewed_properties") or {}):
+                        issue_rows.append({
+                            "Report ID": rid, "Field": issue["field"], "Issue": issue["issue"],
+                            "Original": issue["original"], "Suggestion": issue["suggestion"]
+                        })
+                st.session_state.chatmap_text_quality_issues = issue_rows
+                st.session_state.chatmap_text_quality_findings = find_text_inconsistencies(records)
+
+            st.markdown("**Indonesian + English spelling suggestions**")
+            st.caption("Local dictionary checks only. Capitalized words, acronyms, and project-vocabulary terms are skipped conservatively. Nothing changes until you approve a suggestion.")
+            vocabulary_text = st.text_area(
+                "Project vocabulary (one word per line)",
+                value=st.session_state.get("chatmap_project_vocabulary_text", "Kaliwlingi\nBrebes\nChatMap\nuMap\nWhatsApp\nMangrovesari"),
+                height=100, key="chatmap_project_vocabulary_editor",
+                help="Add place names, local terms, abbreviations, and valid regional words to reduce false positives."
+            )
+            st.session_state.chatmap_project_vocabulary_text = vocabulary_text
+            custom_words = [word.strip() for word in re.split(r"[\n,;]+", vocabulary_text) if word.strip()]
+            scan_spelling = st.button("Scan Indonesian + English spelling", key="chatmap_spellcheck_scan", type="primary")
+            clear_spelling = st.button("Clear spelling results", key="chatmap_spellcheck_clear")
+            if clear_spelling:
+                st.session_state.pop("chatmap_spellcheck_findings", None)
+                st.rerun()
+            if scan_spelling:
+                try:
+                    if "chatmap_spellcheck_engines" not in st.session_state:
+                        st.session_state.chatmap_spellcheck_engines = load_spellcheck_engines()
+                    id_dictionary, english_checker = st.session_state.chatmap_spellcheck_engines
+                    spell_rows = []
                     for rid, rec in records.items():
-                        for issue in inspect_text_quality(rec.get("reviewed_properties") or {}):
-                            issue_rows.append({
-                                "Report ID": rid, "Field": issue["field"], "Issue": issue["issue"],
-                                "Original": issue["original"], "Suggestion": issue["suggestion"]
-                            })
-                    st.session_state.chatmap_text_quality_issues = issue_rows
-                    st.session_state.chatmap_text_quality_findings = find_text_inconsistencies(records)
-
-                st.markdown("**Indonesian + English spelling suggestions**")
-                st.caption("Local dictionary checks only. Capitalized words, acronyms, and project-vocabulary terms are skipped conservatively. Nothing changes until you approve a suggestion.")
-                vocabulary_text = st.text_area(
-                    "Project vocabulary (one word per line)",
-                    value=st.session_state.get("chatmap_project_vocabulary_text", "Kaliwlingi\nBrebes\nChatMap\nuMap\nWhatsApp\nMangrovesari"),
-                    height=100, key="chatmap_project_vocabulary_editor",
-                    help="Add place names, local terms, abbreviations, and valid regional words to reduce false positives."
-                )
-                st.session_state.chatmap_project_vocabulary_text = vocabulary_text
-                custom_words = [word.strip() for word in re.split(r"[\n,;]+", vocabulary_text) if word.strip()]
-                scan_spelling = st.button("Scan Indonesian + English spelling", key="chatmap_spellcheck_scan", type="primary")
-                clear_spelling = st.button("Clear spelling results", key="chatmap_spellcheck_clear")
-                if clear_spelling:
-                    st.session_state.pop("chatmap_spellcheck_findings", None)
-                    st.rerun()
-                if scan_spelling:
-                    try:
-                        if "chatmap_spellcheck_engines" not in st.session_state:
-                            st.session_state.chatmap_spellcheck_engines = load_spellcheck_engines()
-                        id_dictionary, english_checker = st.session_state.chatmap_spellcheck_engines
-                        spell_rows = []
-                        for rid, rec in records.items():
-                            if rec.get("conflict") or rec.get("status") == "Rejected":
-                                continue
-                            for finding in spellcheck_properties(rec.get("reviewed_properties") or {}, id_dictionary, english_checker, custom_words):
-                                spell_rows.append({"report_id": rid, **finding})
-                        st.session_state.chatmap_spellcheck_findings = spell_rows
-                        st.success(f"Spelling scan complete: {len(spell_rows)} field(s) need human review. No data was changed.")
-                    except Exception as exc:
-                        st.error(f"Local spelling engine could not start: {exc}")
-                if "chatmap_spellcheck_findings" in st.session_state:
-                    spell_rows = st.session_state.chatmap_spellcheck_findings
-                    if not spell_rows:
-                        st.success("No spelling suggestions found. This does not guarantee spelling or grammar is correct.")
-                    else:
-                        st.write(f"**Spelling suggestions awaiting review: {len(spell_rows)}**")
-                        for row_index, row in enumerate(spell_rows):
-                            rid = row["report_id"]
-                            with st.container(border=True):
-                                st.markdown(f"**Report:** {rid} · **Field:** {row['field']}")
-                                st.write("Original")
-                                st.code(row["original"], language=None)
-                                st.write("Suggested")
-                                st.code(row["suggestion"], language=None)
-                                st.caption("Possible tokens: " + ", ".join(row["tokens"]))
-                                if st.button("Approve this correction", key=f"approve_spell_{row_index}_{_fingerprint([rid, row['field'], row['original']])[:8]}"):
-                                    applied = apply_approved_spellcheck_finding(records, rid, row["field"], row["original"], row["suggestion"])
-                                    if applied:
-                                        st.session_state.chatmap_review_records = records
-                                        st.session_state.chatmap_spellcheck_findings = [item for item in spell_rows if not (item["report_id"] == rid and item["field"] == row["field"] and item["original"] == row["original"])]
-                                        st.success("Correction applied to this review copy only. The record is now Needs correction.")
-                                        st.rerun()
-                                    else:
-                                        st.warning("Not applied: record changed, conflicted/rejected, or no longer eligible. Scan again.")
-                                st.button(
-                                    "Add flagged words to vocabulary",
-                                    key=f"vocab_spell_{row_index}_{_fingerprint([rid, row['field'], row['original']])[:8]}",
-                                    on_click=_add_spellcheck_words_to_vocabulary,
-                                    args=(row["tokens"],),
-                                    help="Adds the flagged tokens to the editable vocabulary above."
-                                )
-
-                if "chatmap_text_quality_issues" in st.session_state:
-                    issue_rows = st.session_state.chatmap_text_quality_issues
-                    if issue_rows:
-                        st.write(f"**Whitespace findings:** {len(issue_rows)}")
-                        st.dataframe(pd.DataFrame(issue_rows), use_container_width=True)
-                        st.warning("Whitespace cleanup is proposed, not applied automatically.")
-                        if st.button("Approve and apply whitespace-only cleanup", key="approve_whitespace_cleanup"):
-                            changed = apply_approved_whitespace_cleanup(records)
-                            st.session_state.chatmap_review_records = records
-                            st.success(f"Applied whitespace cleanup to {changed} eligible record(s). Changed records are now Needs correction and must be reviewed again.")
-                            st.rerun()
-                    else:
-                        st.success("No whitespace issues found in reviewed text.")
-                if "chatmap_text_quality_findings" in st.session_state:
-                    findings = st.session_state.chatmap_text_quality_findings
-                    if findings:
-                        st.write(f"**Potential inconsistent labels / typos:** {len(findings)}")
-                        options = list(range(len(findings)))
-                        selected_finding = st.selectbox(
-                            "Choose a suggested cluster",
-                            options=options,
-                            format_func=lambda idx: (
-                                f"{findings[idx]['field']}: {' ↔ '.join(findings[idx]['values'])} "
-                                f"({findings[idx]['kind']}, similarity {findings[idx]['similarity']:.3f})"
-                            ),
-                            key="chatmap_text_cluster_choice"
-                        )
-                        finding = findings[selected_finding]
-                        st.write("Values and counts in this cluster:")
-                        st.dataframe(pd.DataFrame([
-                            {"Value": value, "Count": finding["counts"].get(value, 0)}
-                            for value in finding["values"]
-                        ]), use_container_width=True)
-                        st.caption("Review the context before merging. Similar spelling can represent different places, objects, or meanings.")
-                        approved_value = st.text_input(
-                            "Approved canonical value (editable)",
-                            value=finding["canonical"],
-                            key=f"chatmap_canonical_{selected_finding}"
-                        )
-                        if st.button("Approve this mapping across eligible records", key="apply_text_cluster"):
-                            if not approved_value.strip():
-                                st.error("Canonical value cannot be empty.")
-                            else:
-                                mapping = {value: approved_value for value in finding["values"] if value != approved_value}
-                                try:
-                                    changed = apply_approved_text_replacements(records, finding["field"], mapping)
-                                    st.session_state.chatmap_review_records = records
-                                    st.success(f"Applied the approved mapping to {changed} eligible record(s). Changed records are now Needs correction and must be reviewed again.")
-                                    st.rerun()
-                                except ValueError as exc:
-                                    st.error(f"Mapping not applied: {exc}")
-                    else:
-                        st.success("No likely same-field text variants found at the current similarity threshold.")
+                        if rec.get("conflict") or rec.get("status") == "Rejected":
+                            continue
+                        for finding in spellcheck_properties(rec.get("reviewed_properties") or {}, id_dictionary, english_checker, custom_words):
+                            spell_rows.append({"report_id": rid, **finding})
+                    st.session_state.chatmap_spellcheck_findings = spell_rows
+                    st.success(f"Spelling scan complete: {len(spell_rows)} field(s) need human review. No data was changed.")
+                except Exception as exc:
+                    st.error(f"Local spelling engine could not start: {exc}")
+            if "chatmap_spellcheck_findings" in st.session_state:
+                spell_rows = st.session_state.chatmap_spellcheck_findings
+                if not spell_rows:
+                    st.success("No spelling suggestions found. This does not guarantee spelling or grammar is correct.")
                 else:
-                    st.info("Run the scan to inspect whitespace issues and likely text variants.")
-        
-            with st.expander("D. Review and correct one report", expanded=True):
-                ids = list(records.keys())
-                labels = {rid: f"{rid} — {records[rid].get('status', 'New')}" + (" ⚠ conflict" if records[rid].get("conflict") else "") for rid in ids}
-                selected_id = st.selectbox("Report", options=ids, format_func=lambda rid: labels[rid], key="selected_chatmap_report")
-                record = records[selected_id]
-                st.write("**Incoming/source data**")
-                st.json(record.get("source", {}))
-                if record.get("conflict"):
-                    st.warning("A newer ChatMap export changed this report. The reviewed/source version has not been silently replaced.")
-                    st.json(record.get("incoming_source", {}))
-                    if st.button("Accept incoming source for re-review", key="accept_chatmap_incoming"):
-                        promote_incoming_source(records, selected_id)
+                    st.write(f"**Spelling suggestions awaiting review: {len(spell_rows)}**")
+                    for row_index, row in enumerate(spell_rows):
+                        rid = row["report_id"]
+                        with st.container(border=True):
+                            st.markdown(f"**Report:** {rid} · **Field:** {row['field']}")
+                            st.write("Original")
+                            st.code(row["original"], language=None)
+                            st.write("Suggested")
+                            st.code(row["suggestion"], language=None)
+                            st.caption("Possible tokens: " + ", ".join(row["tokens"]))
+                            if st.button("Approve this correction", key=f"approve_spell_{row_index}_{_fingerprint([rid, row['field'], row['original']])[:8]}"):
+                                applied = apply_approved_spellcheck_finding(records, rid, row["field"], row["original"], row["suggestion"])
+                                if applied:
+                                    st.session_state.chatmap_review_records = records
+                                    st.session_state.chatmap_spellcheck_findings = [item for item in spell_rows if not (item["report_id"] == rid and item["field"] == row["field"] and item["original"] == row["original"])]
+                                    st.success("Correction applied to this review copy only. The record is now Needs correction.")
+                                    st.rerun()
+                                else:
+                                    st.warning("Not applied: record changed, conflicted/rejected, or no longer eligible. Scan again.")
+                            st.button(
+                                "Add flagged words to vocabulary",
+                                key=f"vocab_spell_{row_index}_{_fingerprint([rid, row['field'], row['original']])[:8]}",
+                                on_click=_add_spellcheck_words_to_vocabulary,
+                                args=(row["tokens"],),
+                                help="Adds the flagged tokens to the editable vocabulary above."
+                            )
+
+            if "chatmap_text_quality_issues" in st.session_state:
+                issue_rows = st.session_state.chatmap_text_quality_issues
+                if issue_rows:
+                    st.write(f"**Whitespace findings:** {len(issue_rows)}")
+                    st.dataframe(pd.DataFrame(issue_rows), use_container_width=True)
+                    st.warning("Whitespace cleanup is proposed, not applied automatically.")
+                    if st.button("Approve and apply whitespace-only cleanup", key="approve_whitespace_cleanup"):
+                        changed = apply_approved_whitespace_cleanup(records)
                         st.session_state.chatmap_review_records = records
+                        st.success(f"Applied whitespace cleanup to {changed} eligible record(s). Changed records are now Needs correction and must be reviewed again.")
                         st.rerun()
-                properties_text = st.text_area(
-                    "Corrected properties (JSON object)",
-                    value=json.dumps(record.get("reviewed_properties") or {}, ensure_ascii=False, indent=2),
-                    height=220,
-                    key=f"review_props_{selected_id}"
-                )
-                status = st.selectbox("Review status", options=REVIEW_STATUSES, index=REVIEW_STATUSES.index(record.get("status", "New")), key=f"review_status_{selected_id}")
-                notes = st.text_area("Reviewer notes", value=record.get("notes", ""), key=f"review_notes_{selected_id}")
-                if st.button("Save review", type="primary", key="save_chatmap_review"):
-                    try:
-                        corrected = json.loads(properties_text)
-                        if not isinstance(corrected, dict):
-                            raise ValueError("Corrected properties must be a JSON object.")
-                        if status == "Verified" and record.get("conflict"):
-                            raise ValueError("Resolve the incoming-source conflict before marking this record Verified.")
-                        record["reviewed_properties"] = corrected
-                        record["status"] = status
-                        record["notes"] = notes
-                        st.session_state.chatmap_review_records = records
-                        st.success("Review saved for this session. Download the ledger below to preserve it across sessions.")
-                    except (json.JSONDecodeError, ValueError) as exc:
-                        st.error(f"Review not saved: {exc}")
-        
+                else:
+                    st.success("No whitespace issues found in reviewed text.")
+            if "chatmap_text_quality_findings" in st.session_state:
+                findings = st.session_state.chatmap_text_quality_findings
+                if findings:
+                    st.write(f"**Potential inconsistent labels / typos:** {len(findings)}")
+                    options = list(range(len(findings)))
+                    selected_finding = st.selectbox(
+                        "Choose a suggested cluster",
+                        options=options,
+                        format_func=lambda idx: (
+                            f"{findings[idx]['field']}: {' ↔ '.join(findings[idx]['values'])} "
+                            f"({findings[idx]['kind']}, similarity {findings[idx]['similarity']:.3f})"
+                        ),
+                        key="chatmap_text_cluster_choice"
+                    )
+                    finding = findings[selected_finding]
+                    st.write("Values and counts in this cluster:")
+                    st.dataframe(pd.DataFrame([
+                        {"Value": value, "Count": finding["counts"].get(value, 0)}
+                        for value in finding["values"]
+                    ]), use_container_width=True)
+                    st.caption("Review the context before merging. Similar spelling can represent different places, objects, or meanings.")
+                    approved_value = st.text_input(
+                        "Approved canonical value (editable)",
+                        value=finding["canonical"],
+                        key=f"chatmap_canonical_{selected_finding}"
+                    )
+                    if st.button("Approve this mapping across eligible records", key="apply_text_cluster"):
+                        if not approved_value.strip():
+                            st.error("Canonical value cannot be empty.")
+                        else:
+                            mapping = {value: approved_value for value in finding["values"] if value != approved_value}
+                            try:
+                                changed = apply_approved_text_replacements(records, finding["field"], mapping)
+                                st.session_state.chatmap_review_records = records
+                                st.success(f"Applied the approved mapping to {changed} eligible record(s). Changed records are now Needs correction and must be reviewed again.")
+                                st.rerun()
+                            except ValueError as exc:
+                                st.error(f"Mapping not applied: {exc}")
+                else:
+                    st.success("No likely same-field text variants found at the current similarity threshold.")
+            else:
+                st.info("Run the scan to inspect whitespace issues and likely text variants.")
+    
+        with st.expander("D. Review and correct one report", expanded=True):
+            ids = list(records.keys())
+            labels = {rid: f"{rid} — {records[rid].get('status', 'New')}" + (" ⚠ conflict" if records[rid].get("conflict") else "") for rid in ids}
+            selected_id = st.selectbox("Report", options=ids, format_func=lambda rid: labels[rid], key="selected_chatmap_report")
+            record = records[selected_id]
+            st.write("**Incoming/source data**")
+            st.json(record.get("source", {}))
+            if record.get("conflict"):
+                st.warning("A newer ChatMap export changed this report. The reviewed/source version has not been silently replaced.")
+                st.json(record.get("incoming_source", {}))
+                if st.button("Accept incoming source for re-review", key="accept_chatmap_incoming"):
+                    promote_incoming_source(records, selected_id)
+                    st.session_state.chatmap_review_records = records
+                    st.rerun()
+            properties_text = st.text_area(
+                "Corrected properties (JSON object)",
+                value=json.dumps(record.get("reviewed_properties") or {}, ensure_ascii=False, indent=2),
+                height=220,
+                key=f"review_props_{selected_id}"
+            )
+            status = st.selectbox("Review status", options=REVIEW_STATUSES, index=REVIEW_STATUSES.index(record.get("status", "New")), key=f"review_status_{selected_id}")
+            notes = st.text_area("Reviewer notes", value=record.get("notes", ""), key=f"review_notes_{selected_id}")
+            if st.button("Save review", type="primary", key="save_chatmap_review"):
+                try:
+                    corrected = json.loads(properties_text)
+                    if not isinstance(corrected, dict):
+                        raise ValueError("Corrected properties must be a JSON object.")
+                    if status == "Verified" and record.get("conflict"):
+                        raise ValueError("Resolve the incoming-source conflict before marking this record Verified.")
+                    record["reviewed_properties"] = corrected
+                    record["status"] = status
+                    record["notes"] = notes
+                    st.session_state.chatmap_review_records = records
+                    st.success("Review saved for this session. Download the ledger below to preserve it across sessions.")
+                except (json.JSONDecodeError, ValueError) as exc:
+                    st.error(f"Review not saved: {exc}")
+    
 
         if active_workspace == "Prepare map for uMap":
             with st.expander("E. Preview and export", expanded=True):
