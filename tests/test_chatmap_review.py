@@ -273,15 +273,19 @@ class TextQualityReviewTests(unittest.TestCase):
 
 
 class WorkspaceNavigationTests(unittest.TestCase):
-    def test_chatmap_review_is_the_default_workspace(self):
+    def test_beginner_guide_is_the_default_workspace(self):
         source = APP_PATH.read_text(encoding="utf-8")
-        self.assertIn('options=["ChatMap review", "GeoJSON / CSV / HTML tools"]', source)
+        self.assertIn('options=["Beginner guide", "Review ChatMap reports", "Prepare map for uMap", "Advanced tools"]', source)
         self.assertIn('index=0,', source)
-        self.assertIn('if active_workspace == "ChatMap review":', source)
+        self.assertIn('if active_workspace == "Beginner guide":', source)
+        self.assertIn("Start here", source)
+        self.assertIn("You do not need to understand the technical details", source)
 
-    def test_legacy_tools_remain_available_in_their_own_workspace(self):
+    def test_review_export_and_legacy_tools_are_separate_workspaces(self):
         source = APP_PATH.read_text(encoding="utf-8")
-        self.assertIn('if active_workspace == "GeoJSON / CSV / HTML tools":', source)
+        self.assertIn('if active_workspace == "Review ChatMap reports":', source)
+        self.assertIn('if active_workspace == "Prepare map for uMap":', source)
+        self.assertIn('if active_workspace == "Advanced tools":', source)
         self.assertIn("STEP D: BULK HTML STYLING", source)
         self.assertIn("Quick HTML Converter", source)
         self.assertIn("Step C — Stand-alone Join Attributes", source)
@@ -290,7 +294,7 @@ class WorkspaceNavigationTests(unittest.TestCase):
         source = APP_PATH.read_text(encoding="utf-8")
         self.assertIn("Only verified, conflict-free records are included", source)
         self.assertIn('record.get("status") != "Verified" or record.get("conflict")', source)
-        self.assertIn("does not automatically publish to HOT uMap", source)
+        self.assertIn("nothing is auto-published", source)
 
 if __name__ == "__main__":
     unittest.main()
