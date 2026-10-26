@@ -278,7 +278,7 @@ class WorkspaceNavigationTests(unittest.TestCase):
         self.assertIn('options=["Beginner guide", "Review ChatMap reports", "Prepare map for uMap", "Advanced tools"]', source)
         self.assertIn('index=0,', source)
         self.assertIn('if active_workspace == "Beginner guide":', source)
-        self.assertIn("Welcome — start here", source)
+        self.assertIn("Welcome — Start here", source)
         self.assertIn("You do not need to understand technical terms", source)
 
     def test_review_export_and_legacy_tools_are_separate_workspaces(self):
@@ -316,6 +316,16 @@ class WorkspaceNavigationTests(unittest.TestCase):
         self.assertIn("backup of your corrections and decisions", source)
         self.assertNotIn("review ledger (.json)", source)
         self.assertNotIn("Restore ledger", source)
+
+    def test_ui_uses_responsive_native_streamlit_styling_without_new_ui_dependencies(self):
+        source = APP_PATH.read_text(encoding="utf-8")
+        self.assertIn(".umap-eyebrow", source)
+        self.assertIn("@media (max-width: 700px)", source)
+        self.assertIn("Step 2 of 3 · Review", source)
+        self.assertIn("Step 3 of 3 · Prepare and export", source)
+        requirements = (APP_PATH.parent / "requirements.txt").read_text(encoding="utf-8")
+        self.assertNotIn("streamlit-option-menu", requirements)
+        self.assertNotIn("streamlit-extras", requirements)
 
     def test_ui_copy_preserves_manual_verified_only_publishing_rule(self):
         source = APP_PATH.read_text(encoding="utf-8")
