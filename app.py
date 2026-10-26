@@ -1072,7 +1072,7 @@ if active_workspace == "Beginner guide":
         st.write("If you are returning, first upload your **saved review progress** file, then load the newest report file from ChatMap.")
     with st.container(border=True):
         st.markdown("### 2. Check and correct each report")
-        st.write("Choose a report from the list. Read the original information, correct details in your editable copy if needed, choose the review result, and click **Save this report**.")
+        st.write("Choose a report from the list. Read the original information, then update the details in the text box if needed. The box contains formatted text, so keep the punctuation in place. If you are unsure how to change it, leave it unchanged and write a note for the next person. Choose the review result and click **Save this report**.")
         st.write("Do not guess. If you are unsure, add a note and do not approve the report. If a warning says the report has changed, check the new information before approving it.")
     with st.container(border=True):
         st.markdown("### 3. Prepare the map file")
@@ -1295,7 +1295,8 @@ if active_workspace in ("Review ChatMap reports", "Prepare map for uMap"):
                 "Your corrected report details",
                 value=json.dumps(record.get("reviewed_properties") or {}, ensure_ascii=False, indent=2),
                 height=220,
-                key=f"review_props_{selected_id}"
+                key=f"review_props_{selected_id}",
+                help="This box shows the report details as structured text. Change only the information you need and keep the punctuation around it. If you are unsure, leave it unchanged and write a note below."
             )
             status_labels = {"New": "Not checked yet — I have not reviewed this report", "Needs correction": "Needs more checking — not ready for the map", "Verified": "Approved for map — I checked this report", "Rejected": "Do not use — this report should not appear on the map"}
             status = st.selectbox("What is the review result?", options=REVIEW_STATUSES, format_func=lambda value: status_labels.get(value, value), index=REVIEW_STATUSES.index(record.get("status", "New")), key=f"review_status_{selected_id}")
@@ -1329,7 +1330,7 @@ if active_workspace == "Prepare map for uMap":
         st.write(f"**Reports ready for your map: {ready_count} of {len(records)}**")
         if ready_count:
             st.dataframe(pd.DataFrame([
-                {"Report": rid, "Review result": rec.get("status"), "Needs another check": bool(rec.get("conflict")), "Notes": rec.get("notes", "")}
+                {"Report": rid, "Review result": {"New": "Not checked yet", "Needs correction": "Needs more checking", "Verified": "Approved for map", "Rejected": "Do not use"}.get(rec.get("status"), rec.get("status")), "Needs another check": "Yes" if rec.get("conflict") else "No", "Notes": rec.get("notes", "")}
                 for rid, rec in records.items()
             ]), use_container_width=True)
             st.caption("Only reports marked **Verified** with no unresolved change warning are included.")
