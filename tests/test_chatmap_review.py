@@ -8,6 +8,7 @@ import copy
 import hashlib
 import html
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -16,12 +17,16 @@ HELPERS = {
     "_canonical_json", "_fingerprint", "_source_properties",
     "_source_snapshot", "_review_id", "import_chatmap_geojson",
     "promote_incoming_source", "reviewed_geojson", "working_ledger_geojson",
-    "load_working_ledger",
+    "load_working_ledger", "normalize_review_text", "inspect_text_quality",
+    "find_text_inconsistencies", "apply_approved_text_replacements", "apply_approved_whitespace_cleanup",
+    "spellcheck_text", "spellcheck_properties", "apply_approved_spellcheck_finding", "merge_project_vocabulary",
 }
 NAMESPACE = {
     "json": json, "hashlib": hashlib, "copy": copy,
     "REVIEW_STATUSES": ("New", "Needs correction", "Verified", "Rejected"),
-    "html_lib": html,
+    "html_lib": html, "re": re,
+    "difflib": __import__("difflib"),
+    "__file__": str(APP_PATH),
     "_REVIEW_KEYS": {"_review_id", "_review_status", "_review_notes",
                      "_source_fingerprint", "_source_snapshot", "_reviewed_properties"},
 }
@@ -29,6 +34,14 @@ tree = ast.parse(APP_PATH.read_text(encoding="utf-8"))
 nodes = [node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in HELPERS]
 exec(compile(ast.Module(body=nodes, type_ignores=[]), str(APP_PATH), "exec"), NAMESPACE)
 
+
+
+def load_real_spellcheck_engines():
+    from pathlib import Path
+    from spylls.hunspell import Dictionary
+    from spellchecker import SpellChecker
+    prefix = APP_PATH.parent / "dictionaries" / "id_ID"
+    return Dictionary.from_files(str(prefix)), SpellChecker(language="en")
 
 def load_html_renderer():
     tree = ast.parse(APP_PATH.read_text(encoding="utf-8"))
@@ -132,6 +145,156 @@ class ChatMapReviewTests(unittest.TestCase):
         self.assertTrue(accepted)
         self.assertFalse(ledger["r1"]["conflict"])
         self.assertEqual(ledger["r1"]["status"], "Needs correction")
+
+
+class TextQualityReviewTests(unittest.TestCase):
+    def setUp(self):
+        self.normalize = NAMESPACE["normalize_review_text"]
+        self.inspect = NAMESPACE["inspect_text_quality"]
+        self.cluster = NAMESPACE["find_text_inconsistencies"]
+        self.apply = NAMESPACE["apply_approved_text_replacements"]
+
+    def test_whitespace_normalization_is_conservative(self):
+        self.assertEqual(self.normalize("  sampah   plastik\n"), "sampah plastik")
+        self.assertEqual(self.normalize("Kaliwlingi"), "Kaliwlingi")
+        self.assertEqual(self.normalize("e-mail / WhatsApp!"), "e-mail / WhatsApp!")
+
+    def test_quality_scan_suggests_but_does_not_mutate_properties(self):
+        props = {"description": "  sampah   plastik  ", "location": "Kaliwlingi"}
+        original = copy.deepcopy(props)
+        issues = self.inspect(props)
+        self.assertEqual(props, original)
+        self.assertTrue(any(i["field"] == "description" and i["suggestion"] == "sampah plastik" for i in issues))
+        self.assertFalse(any(i["field"] == "location" for i in issues))
+
+    def test_inconsistency_clusters_find_formatting_and_likely_typo(self):
+        records = {
+            "1": {"reviewed_properties": {"waste_type": "Sampah Plastik"}, "status": "New"},
+            "2": {"reviewed_properties": {"waste_type": "sampah plastik"}, "status": "Verified"},
+            "3": {"reviewed_properties": {"waste_type": "sampah plstik"}, "status": "New"},
+            "4": {"reviewed_properties": {"waste_type": "Sampah Plastik"}, "status": "New"},
+        }
+        findings = self.cluster(records, threshold=0.82)
+        self.assertTrue(any(set(f["values"]) == {"Sampah Plastik", "sampah plastik"} and f["kind"] == "formatting" for f in findings))
+        self.assertTrue(any(set(f["values"]) == {"sampah plastik", "sampah plstik"} and f["kind"] == "possible_typo" for f in findings))
+        self.assertTrue(all("similarity" in f and "canonical" in f for f in findings))
+
+
+    def test_inconsistency_scan_ignores_rejected_and_conflicted_records(self):
+        records = {
+            "1": {"reviewed_properties": {"category": "sampah plastik"}, "status": "New", "conflict": False},
+            "2": {"reviewed_properties": {"category": "sampah plstik"}, "status": "Rejected", "conflict": False},
+            "3": {"reviewed_properties": {"category": "sampah plstik"}, "status": "New", "conflict": True},
+        }
+        self.assertEqual(self.cluster(records, threshold=0.82), [])
+
+    def test_bulk_replacement_requires_explicit_mapping_and_demotes_verified(self):
+        records = {
+            "1": {"source": {"properties": {"category": "sampah plstik"}}, "reviewed_properties": {"category": "sampah plstik"}, "status": "Verified", "conflict": False},
+            "2": {"source": {"properties": {"category": "sampah plstik"}}, "reviewed_properties": {"category": "sampah plstik"}, "status": "New", "conflict": False},
+            "3": {"source": {"properties": {"category": "sampah plstik"}}, "reviewed_properties": {"category": "sampah plstik"}, "status": "Verified", "conflict": True},
+            "4": {"source": {"properties": {"category": "sampah plstik"}}, "reviewed_properties": {"category": "sampah plstik"}, "status": "Rejected", "conflict": False},
+        }
+        changed = self.apply(records, "category", {"sampah plstik": "sampah plastik"})
+        self.assertEqual(changed, 2)
+        self.assertEqual(records["1"]["reviewed_properties"]["category"], "sampah plastik")
+        self.assertEqual(records["1"]["status"], "Needs correction")
+        self.assertEqual(records["2"]["status"], "Needs correction")
+        self.assertEqual(records["3"]["reviewed_properties"]["category"], "sampah plstik")
+        self.assertEqual(records["4"]["status"], "Rejected")
+        self.assertEqual(records["1"]["source"]["properties"]["category"], "sampah plstik")
+
+
+    def test_approved_whitespace_cleanup_is_explicit_and_review_gated(self):
+        records = {
+            "1": {"source": {"properties": {"description": "  Sampah   plastik "}}, "reviewed_properties": {"description": "  Sampah   plastik "}, "status": "Verified", "conflict": False},
+            "2": {"source": {"properties": {"description": "  Sampah   plastik "}}, "reviewed_properties": {"description": "  Sampah   plastik "}, "status": "New", "conflict": False},
+            "3": {"source": {"properties": {"description": "  Sampah   plastik "}}, "reviewed_properties": {"description": "  Sampah   plastik "}, "status": "Verified", "conflict": True},
+            "4": {"source": {"properties": {"description": "  Sampah   plastik "}}, "reviewed_properties": {"description": "  Sampah   plastik "}, "status": "Rejected", "conflict": False},
+        }
+        changed = NAMESPACE["apply_approved_whitespace_cleanup"](records)
+        self.assertEqual(changed, 2)
+        self.assertEqual(records["1"]["reviewed_properties"]["description"], "Sampah plastik")
+        self.assertEqual(records["1"]["status"], "Needs correction")
+        self.assertEqual(records["3"]["reviewed_properties"]["description"], "  Sampah   plastik ")
+        self.assertEqual(records["4"]["reviewed_properties"]["description"], "  Sampah   plastik ")
+        self.assertEqual(records["1"]["source"]["properties"]["description"], "  Sampah   plastik ")
+
+
+    def test_spellcheck_suggests_indonesian_typo_without_mutating_properties(self):
+        id_dictionary, english_checker = load_real_spellcheck_engines()
+        props = {"description": "sampah plstik di sungai"}
+        snapshot = copy.deepcopy(props)
+        findings = NAMESPACE["spellcheck_properties"](props, id_dictionary, english_checker, ["Kaliwlingi"])
+        self.assertEqual(props, snapshot)
+        self.assertTrue(any("plastik" in item["suggestion"].casefold() for item in findings))
+
+
+    def test_project_vocabulary_merge_is_case_insensitive_and_preserves_existing_terms(self):
+        merged = NAMESPACE["merge_project_vocabulary"]("Kaliwlingi\nBrebes", ["brebes", "Plastik", "plastik", ""])
+        self.assertEqual(merged.splitlines(), ["Kaliwlingi", "Brebes", "Plastik"])
+
+    def test_spellcheck_skips_project_vocabulary_and_capitalized_names(self):
+        id_dictionary, english_checker = load_real_spellcheck_engines()
+        findings = NAMESPACE["spellcheck_text"]("Kaliwlingi Mangrovesari WhatsApp", id_dictionary, english_checker, ["Kaliwlingi", "Mangrovesari", "WhatsApp"])
+        self.assertEqual(findings, [])
+
+    def test_spellcheck_ignores_urls_emails_and_structured_reference_ids(self):
+        id_dictionary, english_checker = load_real_spellcheck_engines()
+        text = "See https://kaliwlingi.example.org/wastemap and mail team@example.org; ref:ABC-123 task_9XK2."
+        findings = NAMESPACE["spellcheck_text"](text, id_dictionary, english_checker)
+        self.assertEqual(findings, [])
+
+    def test_approved_spellcheck_edits_one_record_and_preserves_source(self):
+        records = {
+            "one": {"source": {"geometry": {"type": "Point", "coordinates": [109.0, -6.8]}, "properties": {"description": "sampah plstik"}}, "reviewed_properties": {"description": "sampah plstik"}, "status": "Verified", "conflict": False},
+            "two": {"source": {"properties": {"description": "sampah plstik"}}, "reviewed_properties": {"description": "sampah plstik"}, "status": "Verified", "conflict": False},
+            "three": {"reviewed_properties": {"description": "sampah plstik"}, "status": "Verified", "conflict": True},
+            "four": {"reviewed_properties": {"description": "sampah plstik"}, "status": "Rejected", "conflict": False},
+        }
+        apply_one = NAMESPACE["apply_approved_spellcheck_finding"]
+        self.assertTrue(apply_one(records, "one", "description", "sampah plstik", "sampah plastik"))
+        # A single explicit approval applies only to the selected record.
+        self.assertFalse(apply_one(records, "three", "description", "sampah plstik", "sampah plastik"))
+        self.assertFalse(apply_one(records, "four", "description", "sampah plstik", "sampah plastik"))
+        self.assertEqual(records["one"]["status"], "Needs correction")
+        self.assertEqual(records["one"]["source"]["properties"]["description"], "sampah plstik")
+        self.assertEqual(records["one"]["source"]["geometry"], {"type": "Point", "coordinates": [109.0, -6.8]})
+        self.assertFalse(apply_one(records, "one", "description", "sampah plstik", "sampah plastik"))
+        self.assertEqual(records["two"]["reviewed_properties"]["description"], "sampah plstik")
+        self.assertEqual(records["two"]["status"], "Verified")
+
+    def test_bulk_replacement_rejects_invalid_inputs(self):
+        records = {"1": {"reviewed_properties": {"category": "old"}, "status": "New", "conflict": False}}
+        with self.assertRaises(ValueError):
+            self.apply(records, "", {"old": "new"})
+        with self.assertRaises(ValueError):
+            self.apply(records, "category", {"old": ""})
+
+
+class WorkspaceNavigationTests(unittest.TestCase):
+    def test_beginner_guide_is_the_default_workspace(self):
+        source = APP_PATH.read_text(encoding="utf-8")
+        self.assertIn('options=["Beginner guide", "Review ChatMap reports", "Prepare map for uMap", "Advanced tools"]', source)
+        self.assertIn('index=0,', source)
+        self.assertIn('if active_workspace == "Beginner guide":', source)
+        self.assertIn("Start here", source)
+        self.assertIn("You do not need to understand the technical details", source)
+
+    def test_review_export_and_legacy_tools_are_separate_workspaces(self):
+        source = APP_PATH.read_text(encoding="utf-8")
+        self.assertIn('if active_workspace == "Review ChatMap reports":', source)
+        self.assertIn('if active_workspace == "Prepare map for uMap":', source)
+        self.assertIn('if active_workspace == "Advanced tools":', source)
+        self.assertIn("STEP D: BULK HTML STYLING", source)
+        self.assertIn("Quick HTML Converter", source)
+        self.assertIn("Step C — Stand-alone Join Attributes", source)
+
+    def test_ui_copy_preserves_manual_verified_only_publishing_rule(self):
+        source = APP_PATH.read_text(encoding="utf-8")
+        self.assertIn("Only verified, conflict-free records are included", source)
+        self.assertIn('record.get("status") != "Verified" or record.get("conflict")', source)
+        self.assertIn("nothing is auto-published", source)
 
 if __name__ == "__main__":
     unittest.main()
