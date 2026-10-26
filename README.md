@@ -41,13 +41,14 @@ This project was developed and/or maintained with AI assistance. AI was used to 
 
 ## ChatMap review and uMap publication workflow
 
-The **ChatMap → Review → Publish to uMap** section supports a deliberate, human-reviewed workflow for Brebes or another project:
+The app now separates the workflow into four destinations in the sidebar:
 
-1. In [ChatMap](https://chatmap.hotosm.org/), upload the exported WhatsApp/Telegram/Signal chat archive and download its GeoJSON.
-2. Upload that GeoJSON in this app. Re-imports are compared with the current review ledger.
-3. Review each report, edit its properties as JSON, add reviewer notes, and set its status to `New`, `Needs correction`, `Verified`, or `Rejected`.
-4. Download **verified-only GeoJSON**. If this is the first publication, open [HOT uMap](https://umap.hotosm.org/), sign in, create and save a map, then import the GeoJSON in the map editor. Inspect the features and extent before saving/sharing.
-5. Download the **review ledger backup** after changes and keep it with the project. Upload that ledger in a later session to continue reviewing.
+1. **Beginner guide** — a plain-language overview for first-time users.
+2. **Review ChatMap reports** — load the latest [ChatMap](https://chatmap.hotosm.org/) export, restore a review backup, check reports, and save corrections.
+3. **Prepare map for uMap** — download only approved reports, then manually import the file into [HOT uMap](https://umap.hotosm.org/). Check the map before saving or sharing.
+4. **Advanced tools** — combine/convert GeoJSON, join CSV attributes, and generate HTML styling.
+
+Download the **review ledger backup** after changes and keep it with the project. Upload that ledger in a later session to continue reviewing.
 
 ### Text-quality and consistency review
 
