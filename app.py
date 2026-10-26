@@ -35,7 +35,7 @@ with st.sidebar:
         "Choose a workflow",
         options=["Beginner guide", "Review ChatMap reports", "Prepare map for uMap", "Advanced tools"],
         index=0,
-        help="Start with the beginner guide, then review reports before preparing a map export.",
+        help="New here? Start with Beginner guide. It explains each step and which file to use.",
         label_visibility="collapsed",
     )
     st.divider()
@@ -1132,9 +1132,15 @@ if active_workspace in ("Review ChatMap reports", "Prepare map for uMap"):
     records = st.session_state.chatmap_review_records
     if active_workspace == "Review ChatMap reports" and records:
         status_counts = {status: sum(1 for r in records.values() if r.get("status") == status) for status in REVIEW_STATUSES}
+        status_labels = {
+            "New": "Not checked yet",
+            "Needs correction": "Needs more checking",
+            "Verified": "Approved for map",
+            "Rejected": "Do not use",
+        }
         metric_cols = st.columns(4)
         for col, status in zip(metric_cols, REVIEW_STATUSES):
-            col.metric(status, status_counts[status])
+            col.metric(status_labels.get(status, status), status_counts[status])
         conflict_count = sum(1 for r in records.values() if r.get("conflict"))
         st.caption(f"{conflict_count} report(s) have newer information that needs checking. These reports cannot be included in the map file until the warning is resolved.")
     
@@ -1272,15 +1278,16 @@ if active_workspace in ("Review ChatMap reports", "Prepare map for uMap"):
     
         with st.expander("D. Review and correct one report", expanded=True):
             ids = list(records.keys())
-            labels = {rid: f"{rid} — {records[rid].get('status', 'New')}" + (" ⚠ conflict" if records[rid].get("conflict") else "") for rid in ids}
+            status_labels = {"New": "Not checked yet", "Needs correction": "Needs more checking", "Verified": "Approved for map", "Rejected": "Do not use"}
+            labels = {rid: f"{rid} — {status_labels.get(records[rid].get('status', 'New'), records[rid].get('status', 'New'))}" + (" ⚠ needs another check" if records[rid].get("conflict") else "") for rid in ids}
             selected_id = st.selectbox("Report", options=ids, format_func=lambda rid: labels[rid], key="selected_chatmap_report")
             record = records[selected_id]
             st.write("**Original information from ChatMap (kept unchanged)**")
             st.json(record.get("source", {}))
             if record.get("conflict"):
-                st.warning("A newer ChatMap export changed this report. The reviewed/source version has not been silently replaced.")
+                st.warning("A newer ChatMap file contains different information for this report. Your earlier edits are safe. Check the new information before approving it.")
                 st.json(record.get("incoming_source", {}))
-                if st.button("Accept incoming source for re-review", key="accept_chatmap_incoming"):
+                if st.button("Use the updated information and check this report again", key="accept_chatmap_incoming"):
                     promote_incoming_source(records, selected_id)
                     st.session_state.chatmap_review_records = records
                     st.rerun()
@@ -1290,13 +1297,14 @@ if active_workspace in ("Review ChatMap reports", "Prepare map for uMap"):
                 height=220,
                 key=f"review_props_{selected_id}"
             )
-            status = st.selectbox("What is the review result?", options=REVIEW_STATUSES, index=REVIEW_STATUSES.index(record.get("status", "New")), key=f"review_status_{selected_id}")
+            status_labels = {"New": "Not checked yet — I have not reviewed this report", "Needs correction": "Needs more checking — not ready for the map", "Verified": "Approved for map — I checked this report", "Rejected": "Do not use — this report should not appear on the map"}
+            status = st.selectbox("What is the review result?", options=REVIEW_STATUSES, format_func=lambda value: status_labels.get(value, value), index=REVIEW_STATUSES.index(record.get("status", "New")), key=f"review_status_{selected_id}")
             notes = st.text_area("Notes for the next person (optional)", value=record.get("notes", ""), key=f"review_notes_{selected_id}")
             if st.button("Save this report", type="primary", key="save_chatmap_review"):
                 try:
                     corrected = json.loads(properties_text)
                     if not isinstance(corrected, dict):
-                        raise ValueError("Corrected properties must be a JSON object.")
+                        raise ValueError("The report details are not in the expected format. Undo the last change or restore the punctuation, then try again.")
                     if status == "Verified" and record.get("conflict"):
                         raise ValueError("Resolve the incoming-source conflict before marking this record Verified.")
                     record["reviewed_properties"] = corrected
@@ -1304,8 +1312,10 @@ if active_workspace in ("Review ChatMap reports", "Prepare map for uMap"):
                     record["notes"] = notes
                     st.session_state.chatmap_review_records = records
                     st.success("Your changes are saved for this session. On **Prepare your map**, download **saved review progress** so you can continue another time.")
-                except (json.JSONDecodeError, ValueError) as exc:
-                    st.error(f"Review not saved: {exc}")
+                except json.JSONDecodeError:
+                    st.error("Could not save because the report details are not in the expected format. Undo the last change or restore the punctuation, then try again.")
+                except ValueError as exc:
+                    st.error(f"Could not save this report: {exc}")
 
 if active_workspace == "Prepare map for uMap":
     st.header("Prepare your map")
