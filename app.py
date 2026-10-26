@@ -30,7 +30,7 @@ st.markdown(
     [data-testid="stMetric"] {border: 1px solid rgba(128,128,128,.16); min-height: 105px;}
     [data-testid="stMetricLabel"] {font-weight: 650;}
     div[data-testid="stButton"] > button, div[data-testid="stDownloadButton"] > button {min-height: 2.65rem; transition: border-color .15s ease, transform .15s ease;}
-    div[data-testid="stButton"] > button:hover, div[data-testid="stDownloadButton"] > button:hover {border-color: var(--primary-color); transform: translateY(-1px);}
+    div[data-testid="stButton"] > button:hover, div[data-testid="stDownloadButton"] > button:hover {border-color: var(--primary-color, #0f766e); transform: translateY(-1px);}
     div[data-testid="stFileUploader"] section {border-radius: .75rem;}
     div[data-testid="stTextArea"] textarea, div[data-testid="stTextInput"] input {border-radius: .55rem;}
     div[data-testid="stAlert"] {border-radius: .75rem;}
@@ -1074,7 +1074,7 @@ def _parse_chatmap_geojson(upload):
 
 if active_workspace == "Beginner guide":
     st.markdown("---")
-    st.header("Welcome — start here")
+    st.header("Welcome — Start here")
     st.write("Use this tool to check reports from ChatMap before adding them to your community map. Follow the steps in order. You do not need to understand technical terms.")
     st.subheader("Before you begin")
     st.markdown("""
