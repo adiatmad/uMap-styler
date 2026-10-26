@@ -278,8 +278,8 @@ class WorkspaceNavigationTests(unittest.TestCase):
         self.assertIn('options=["Beginner guide", "Review ChatMap reports", "Prepare map for uMap", "Advanced tools"]', source)
         self.assertIn('index=0,', source)
         self.assertIn('if active_workspace == "Beginner guide":', source)
-        self.assertIn("Start here", source)
-        self.assertIn("You do not need to understand the technical details", source)
+        self.assertIn("Welcome — start here", source)
+        self.assertIn("You do not need to understand technical terms", source)
 
     def test_review_export_and_legacy_tools_are_separate_workspaces(self):
         source = APP_PATH.read_text(encoding="utf-8")
@@ -289,6 +289,33 @@ class WorkspaceNavigationTests(unittest.TestCase):
         self.assertIn("STEP D: BULK HTML STYLING", source)
         self.assertIn("Quick HTML Converter", source)
         self.assertIn("Step C — Stand-alone Join Attributes", source)
+
+    def test_map_preparation_is_reachable_and_has_a_helpful_empty_state(self):
+        tree = ast.parse(APP_PATH.read_text(encoding="utf-8"))
+        prepare_blocks = [
+            node for node in tree.body
+            if isinstance(node, ast.If)
+            and isinstance(node.test, ast.Compare)
+            and isinstance(node.test.left, ast.Name)
+            and node.test.left.id == "active_workspace"
+            and len(node.test.ops) == 1
+            and isinstance(node.test.ops[0], ast.Eq)
+            and isinstance(node.test.comparators[0], ast.Constant)
+            and node.test.comparators[0].value == "Prepare map for uMap"
+        ]
+        self.assertEqual(len(prepare_blocks), 1)
+        prepare_source = ast.get_source_segment(APP_PATH.read_text(encoding="utf-8"), prepare_blocks[0])
+        self.assertIn("Prepare your map", prepare_source)
+        self.assertIn("No reports loaded yet", prepare_source)
+        self.assertIn("Download approved reports for uMap", prepare_source)
+        self.assertIn("Download saved review progress", prepare_source)
+
+    def test_beginner_copy_explains_saved_progress_without_ledger_jargon(self):
+        source = APP_PATH.read_text(encoding="utf-8")
+        self.assertIn("Saved review progress", source)
+        self.assertIn("backup of your corrections and decisions", source)
+        self.assertNotIn("review ledger (.json)", source)
+        self.assertNotIn("Restore ledger", source)
 
     def test_ui_copy_preserves_manual_verified_only_publishing_rule(self):
         source = APP_PATH.read_text(encoding="utf-8")
