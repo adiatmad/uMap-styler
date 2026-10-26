@@ -659,7 +659,7 @@ def _review_id(feature, index=0):
     return "cm-" + _fingerprint(_source_snapshot(feature))[:20]
 
 def import_chatmap_geojson(geojson, existing_records=None):
-    """Merge a ChatMap GeoJSON export into a review ledger without overwriting edits."""
+    """Merge a ChatMap GeoJSON export into a saved review progress without overwriting edits."""
     if not isinstance(geojson, dict) or geojson.get("type") != "FeatureCollection":
         raise ValueError("Expected a GeoJSON FeatureCollection.")
     incoming = geojson.get("features")
@@ -771,7 +771,7 @@ def load_working_ledger(data):
         raise ValueError("Not a supported uMap Styler review-ledger file (version 1).")
     records = data.get("records")
     if not isinstance(records, dict):
-        raise ValueError("Review ledger records must be an object.")
+        raise ValueError("Saved review progress records must be an object.")
     for rid, record in records.items():
         if not isinstance(record, dict) or record.get("status") not in REVIEW_STATUSES:
             raise ValueError(f"Invalid review record or status for {rid!r}.")
@@ -1057,38 +1057,48 @@ def _parse_chatmap_geojson(upload):
 
 if active_workspace == "Beginner guide":
     st.markdown("---")
-    st.header("Start here")
-    st.write("Use this app to check community reports before adding them to your map. You do not need to understand the technical details.")
-    st.subheader("The workflow")
+    st.header("Welcome — start here")
+    st.write("Use this tool to check reports from ChatMap before adding them to your community map. Follow the steps in order. You do not need to understand technical terms.")
+    st.subheader("Before you begin")
     st.markdown("""
-    **1. Get the latest reports**
-    
-    Download the latest report file from ChatMap, then open **Review ChatMap reports** in the sidebar and upload it.
-    
-    **2. Check each report**
-    
-    Read the original report, correct details when needed, and save your review. If a report changed since your last review, resolve that warning before approving it.
-    
-    **3. Prepare your map update**
-    
-    Open **Prepare map for uMap** and download the approved reports. Then open your uMap map, import the downloaded file, check the map, and save it.
+    - Have the latest report file you downloaded from ChatMap.
+    - If you reviewed reports before, find your **saved review progress** file.
+    - Make sure you can open and edit the uMap map where these reports belong.
     """)
-    st.info("Only reports marked **Verified** with no unresolved change warning are included in the download. Nothing is sent to uMap automatically.")
-    st.subheader("What do these labels mean?")
+    st.subheader("Follow these steps")
+    with st.container(border=True):
+        st.markdown("### 1. Load your reports")
+        st.write("Choose **Review ChatMap reports** in the menu on the left. If this is your first time, upload the latest file you downloaded from ChatMap and click **Load and check reports**.")
+        st.write("If you are returning, first upload your **saved review progress** file, then load the newest report file from ChatMap.")
+    with st.container(border=True):
+        st.markdown("### 2. Check and correct each report")
+        st.write("Choose a report from the list. Read the original information, correct details in your editable copy if needed, choose the review result, and click **Save this report**.")
+        st.write("Do not guess. If you are unsure, add a note and do not approve the report. If a warning says the report has changed, check the new information before approving it.")
+    with st.container(border=True):
+        st.markdown("### 3. Prepare the map file")
+        st.write("Open **Prepare your map**. This page shows how many reports are approved and ready. Download **approved reports for uMap**. Only approved reports without unresolved warnings are included.")
+    with st.container(border=True):
+        st.markdown("### 4. Add the file to uMap")
+        st.write("Open your uMap map and enter edit mode. Choose **Import data**, select the approved reports file you downloaded, check that the points or areas and details look right, then save the map.")
+    with st.container(border=True):
+        st.markdown("### 5. Save your progress for next time")
+        st.write("On **Prepare your map**, download **saved review progress** and keep it somewhere safe. Next time, upload it in **Review ChatMap reports** before loading the newest ChatMap file.")
+    st.warning("This tool does not update uMap by itself. You choose what to approve, import the approved file, check the result, and save the map.")
+    st.subheader("What do these words mean?")
     st.markdown("""
-    - **Original report:** the information received from ChatMap.
-    - **Your review:** the version you can correct without changing the original.
-    - **Needs correction:** this report still needs checking before approval.
-    - **Changed since last review:** newer source information arrived; check it before approving.
-    - **Verified:** you have checked and approved the report for export.
+    - **Original information:** what came from ChatMap; it is kept so you can compare it with your edits.
+    - **Your edited copy:** the version you can correct.
+    - **Needs checking:** this report is not ready for the map yet.
+    - **Changed since your last check:** a newer ChatMap file has different information; check it again.
+    - **Verified:** you checked the report and approve it for the map.
+    - **Saved review progress:** a backup of your corrections and decisions. It is not the map file.
     """)
-    st.caption("Tip: download the review backup after making changes and keep it with your project files.")
 
 if active_workspace in ("Review ChatMap reports", "Prepare map for uMap"):
     st.markdown("---")
     if active_workspace == "Review ChatMap reports":
         st.header("Review ChatMap reports")
-        st.caption("Load reports, check their details, and save your corrections. Map export is in the separate Prepare map for uMap section.")
+        st.write("Load reports, check and correct their details, and save your decisions. When finished, open **Prepare your map**.")
     else:
         st.header("Prepare map for uMap")
         st.caption("Download only approved reports, then import the file into your uMap map yourself.")
@@ -1098,19 +1108,19 @@ if active_workspace in ("Review ChatMap reports", "Prepare map for uMap"):
         st.session_state.chatmap_review_records = {}
     
     if active_workspace == "Review ChatMap reports":
-        with st.expander("A. Restore a saved review ledger", expanded=not bool(st.session_state.chatmap_review_records)):
-            ledger_upload = st.file_uploader("Upload a previous uMap Styler review ledger (.json)", type=["json"], key="chatmap_ledger_upload")
-            if ledger_upload and st.button("Restore ledger", key="restore_chatmap_ledger"):
+        with st.expander("Step 1 — Load saved review progress (only if you have used this tool before)", expanded=not bool(st.session_state.chatmap_review_records)):
+            ledger_upload = st.file_uploader("Choose your saved review progress file (optional)", type=["json"], key="chatmap_ledger_upload")
+            if ledger_upload and st.button("Load my saved progress", key="restore_chatmap_ledger"):
                 try:
                     restored = load_working_ledger(json.loads(ledger_upload.getvalue().decode("utf-8-sig")))
                     st.session_state.chatmap_review_records = restored
                     st.success(f"Restored {len(restored)} review records.")
                 except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-                    st.error(f"Ledger not restored: {exc}")
+                    st.error(f"Could not load saved progress: {exc}")
         
-        with st.expander("B. Import the latest ChatMap GeoJSON", expanded=True):
-            chatmap_upload = st.file_uploader("ChatMap GeoJSON download", type=["geojson", "json"], key="chatmap_geojson_upload")
-            if chatmap_upload and st.button("Import / compare with current ledger", type="primary", key="import_chatmap"):
+        with st.expander("Step 2 — Load reports from ChatMap", expanded=True):
+            chatmap_upload = st.file_uploader("Choose the report file downloaded from ChatMap", type=["geojson", "json"], key="chatmap_geojson_upload")
+            if chatmap_upload and st.button("Load and check reports", type="primary", key="import_chatmap"):
                 try:
                     parsed = _parse_chatmap_geojson(chatmap_upload)
                     records, counts = import_chatmap_geojson(parsed, st.session_state.chatmap_review_records)
@@ -1126,7 +1136,7 @@ if active_workspace in ("Review ChatMap reports", "Prepare map for uMap"):
         for col, status in zip(metric_cols, REVIEW_STATUSES):
             col.metric(status, status_counts[status])
         conflict_count = sum(1 for r in records.values() if r.get("conflict"))
-        st.caption(f"{conflict_count} record(s) have changed source data awaiting review. Conflicted records cannot be published.")
+        st.caption(f"{conflict_count} report(s) have newer information that needs checking. These reports cannot be included in the map file until the warning is resolved.")
     
     
         with st.expander("C. Detect text-quality issues and inconsistent labels", expanded=False):
@@ -1265,7 +1275,7 @@ if active_workspace in ("Review ChatMap reports", "Prepare map for uMap"):
             labels = {rid: f"{rid} — {records[rid].get('status', 'New')}" + (" ⚠ conflict" if records[rid].get("conflict") else "") for rid in ids}
             selected_id = st.selectbox("Report", options=ids, format_func=lambda rid: labels[rid], key="selected_chatmap_report")
             record = records[selected_id]
-            st.write("**Incoming/source data**")
+            st.write("**Original information from ChatMap (kept unchanged)**")
             st.json(record.get("source", {}))
             if record.get("conflict"):
                 st.warning("A newer ChatMap export changed this report. The reviewed/source version has not been silently replaced.")
@@ -1275,14 +1285,14 @@ if active_workspace in ("Review ChatMap reports", "Prepare map for uMap"):
                     st.session_state.chatmap_review_records = records
                     st.rerun()
             properties_text = st.text_area(
-                "Corrected properties (JSON object)",
+                "Your corrected report details",
                 value=json.dumps(record.get("reviewed_properties") or {}, ensure_ascii=False, indent=2),
                 height=220,
                 key=f"review_props_{selected_id}"
             )
-            status = st.selectbox("Review status", options=REVIEW_STATUSES, index=REVIEW_STATUSES.index(record.get("status", "New")), key=f"review_status_{selected_id}")
-            notes = st.text_area("Reviewer notes", value=record.get("notes", ""), key=f"review_notes_{selected_id}")
-            if st.button("Save review", type="primary", key="save_chatmap_review"):
+            status = st.selectbox("What is the review result?", options=REVIEW_STATUSES, index=REVIEW_STATUSES.index(record.get("status", "New")), key=f"review_status_{selected_id}")
+            notes = st.text_area("Notes for the next person (optional)", value=record.get("notes", ""), key=f"review_notes_{selected_id}")
+            if st.button("Save this report", type="primary", key="save_chatmap_review"):
                 try:
                     corrected = json.loads(properties_text)
                     if not isinstance(corrected, dict):
@@ -1293,36 +1303,56 @@ if active_workspace in ("Review ChatMap reports", "Prepare map for uMap"):
                     record["status"] = status
                     record["notes"] = notes
                     st.session_state.chatmap_review_records = records
-                    st.success("Review saved for this session. Download the ledger below to preserve it across sessions.")
+                    st.success("Your changes are saved for this session. On **Prepare your map**, download **saved review progress** so you can continue another time.")
                 except (json.JSONDecodeError, ValueError) as exc:
                     st.error(f"Review not saved: {exc}")
-    
 
-        if active_workspace == "Prepare map for uMap":
-            with st.expander("E. Preview and export", expanded=True):
-                publishable = reviewed_geojson(records)
-                st.write(f"**Publishable verified records:** {len(publishable['features'])} / {len(records)}")
-                st.dataframe(pd.DataFrame([
-                    {"Report ID": rid, "Status": rec.get("status"), "Conflict": bool(rec.get("conflict")), "Notes": rec.get("notes", "")}
-                    for rid, rec in records.items()
-                ]), use_container_width=True)
-                if publishable["features"]:
-                    st.json(publishable)
-                else:
-                    st.warning("Nothing is eligible for publication yet. Only Verified, conflict-free records are exported.")
-                st.download_button(
-                    "Download verified-only GeoJSON for uMap",
-                    data=json.dumps(publishable, ensure_ascii=False, indent=2).encode("utf-8"),
-                    file_name="verified_for_umap.geojson",
-                    mime="application/geo+json",
-                    disabled=not bool(publishable["features"]),
-                    key="download_verified_chatmap_geojson"
-                )
-                st.download_button(
-                    "Download review ledger backup",
-                    data=json.dumps(working_ledger_geojson(records), ensure_ascii=False, indent=2).encode("utf-8"),
-                    file_name="chatmap_review_ledger.json",
-                    mime="application/json",
-                    key="download_chatmap_review_ledger"
-                )
-                st.caption("The ledger is the review history/working copy. Keep it with your project files. The app intentionally does not push to a uMap server because no map exists yet and authenticated write behavior has not been verified.")
+if active_workspace == "Prepare map for uMap":
+    st.header("Prepare your map")
+    st.write("Use this page to make a file of approved reports for your uMap map. Nothing is sent to uMap automatically.")
+    if not records:
+        st.info("**No reports loaded yet.** First open **Review ChatMap reports**, load your ChatMap report file, and check the reports. Then return here.")
+    else:
+        publishable = reviewed_geojson(records)
+        ready_count = len(publishable["features"])
+        st.subheader("Step 1 — Check what is ready")
+        st.write(f"**Reports ready for your map: {ready_count} of {len(records)}**")
+        if ready_count:
+            st.dataframe(pd.DataFrame([
+                {"Report": rid, "Review result": rec.get("status"), "Needs another check": bool(rec.get("conflict")), "Notes": rec.get("notes", "")}
+                for rid, rec in records.items()
+            ]), use_container_width=True)
+            st.caption("Only reports marked **Verified** with no unresolved change warning are included.")
+            with st.expander("Preview the approved reports"):
+                st.json(publishable)
+        else:
+            st.warning("No reports are ready yet. Return to **Review ChatMap reports**, check each report, choose **Verified**, and save it. Resolve any change warnings first.")
+        st.subheader("Step 2 — Download reports for uMap")
+        st.write("Save the approved reports file to your computer. You will add this file to uMap yourself.")
+        st.download_button(
+            "Download approved reports for uMap",
+            data=json.dumps(publishable, ensure_ascii=False, indent=2).encode("utf-8"),
+            file_name="verified_for_umap.geojson",
+            mime="application/geo+json",
+            disabled=not bool(publishable["features"]),
+            key="download_verified_chatmap_geojson"
+        )
+        st.subheader("Step 3 — Save your progress for next time")
+        st.write("Keep this backup safe. It remembers your corrections and review decisions. It is not the file you import into your map.")
+        st.download_button(
+            "Download saved review progress",
+            data=json.dumps(working_ledger_geojson(records), ensure_ascii=False, indent=2).encode("utf-8"),
+            file_name="chatmap_review_progress.json",
+            mime="application/json",
+            key="download_chatmap_review_ledger"
+        )
+        st.subheader("Step 4 — Add the approved file to uMap")
+        st.markdown("""
+        1. Open your uMap map and enter edit mode.
+        2. Choose **Import data** and select the file named verified_for_umap.geojson.
+        3. Check that the points or areas appear in the right places and their details look correct.
+        4. Save your uMap map.
+        
+        If you cannot find **Import data**, make sure you are editing the map. The button position can vary.
+        """)
+        st.warning("Downloading does not update uMap. Check the map before saving. Reports that are not approved are not included.")
