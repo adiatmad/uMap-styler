@@ -317,6 +317,16 @@ class WorkspaceNavigationTests(unittest.TestCase):
         self.assertNotIn("review ledger (.json)", source)
         self.assertNotIn("Restore ledger", source)
 
+    def test_ui_uses_responsive_native_streamlit_styling_without_new_ui_dependencies(self):
+        source = APP_PATH.read_text(encoding="utf-8")
+        self.assertIn(".umap-eyebrow", source)
+        self.assertIn("@media (max-width: 700px)", source)
+        self.assertIn("Step 2 of 3 · Review", source)
+        self.assertIn("Step 3 of 3 · Prepare and export", source)
+        requirements = (APP_PATH.parent / "requirements.txt").read_text(encoding="utf-8")
+        self.assertNotIn("streamlit-option-menu", requirements)
+        self.assertNotIn("streamlit-extras", requirements)
+
     def test_ui_copy_preserves_manual_verified_only_publishing_rule(self):
         source = APP_PATH.read_text(encoding="utf-8")
         self.assertIn("Only verified, conflict-free records are included", source)
