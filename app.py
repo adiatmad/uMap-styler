@@ -15,28 +15,83 @@ st.set_page_config(page_title="uMap Styler | ChatMap Review", page_icon="🗺️
 st.markdown(
     """
     <style>
-    .block-container {padding-top: 1.7rem; padding-bottom: 3rem; max-width: 1500px;}
+    /* ---------- Design tokens ---------- */
+    :root {
+      --umap-accent: var(--primary-color, #0f766e);
+      --umap-accent-ink: var(--primary-color, #0b5f58);
+      --umap-accent-soft: color-mix(in srgb, var(--primary-color, #0f766e) 9%, transparent);
+      --umap-line: rgba(108, 117, 125, .30);
+      --umap-surface: color-mix(in srgb, currentColor 4%, transparent);
+      --umap-radius: .8rem;
+    }
+
+    /* ---------- Layout ---------- */
+    .block-container {padding-top: 2rem; padding-bottom: 3.5rem; max-width: 1360px;}
+    [data-testid="stHeader"] {display: none;}
     [data-testid="stSidebar"] {border-right: 1px solid rgba(128,128,128,.22);}
-    [data-testid="stMetric"] {background: rgba(128,128,128,.07); padding: .8rem 1rem; border-radius: .75rem;}
-    div[data-testid="stButton"] > button[kind="primary"] {border-radius: .55rem; font-weight: 600;}
-    div[data-testid="stDownloadButton"] > button {border-radius: .55rem;}
-    div[data-testid="stFileUploader"] {border-radius: .65rem;}
-    .umap-subtitle {font-size: 1.02rem; opacity: .86; max-width: 900px; line-height: 1.65;}
-    .umap-eyebrow {font-size: .74rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; opacity: .68; margin-bottom: -.4rem;}
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {line-height: 1.55;}
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h2 {margin-bottom: .1rem;}
+    [data-testid="stVerticalBlockBorderWrapper"] {border-radius: var(--umap-radius);}
+
+    /* ---------- Typography scale (overrides Streamlit's oversized headings) ---------- */
+    [data-testid="stAppViewContainer"] h1 {font-size: 2.05rem; font-weight: 750; letter-spacing: -.015em;}
+    [data-testid="stAppViewContainer"] h2 {font-size: 1.38rem; font-weight: 700; letter-spacing: -.01em;}
+    [data-testid="stAppViewContainer"] h3 {font-size: 1.12rem; font-weight: 700;}
+    [data-testid="stAppViewContainer"] h4 {font-size: .98rem; font-weight: 650;}
+    [data-testid="stMarkdownContainer"] p {line-height: 1.6;}
+    [data-testid="stAppViewContainer"] ul {line-height: 1.7;}
+
+    /* ---------- Header block ---------- */
+    .umap-eyebrow {font-size: .74rem; font-weight: 750; letter-spacing: .12em; text-transform: uppercase; color: var(--umap-accent-ink); margin-bottom: -.2rem;}
+    .umap-subtitle {font-size: 1.02rem; opacity: .86; max-width: 780px; line-height: 1.65; margin-bottom: .2rem;}
+    .umap-flow {display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin: .35rem 0 .2rem 0;}
+    .umap-chip {display: inline-flex; align-items: center; gap: .3rem; padding: .28rem .7rem; border-radius: 999px; border: 1px solid var(--umap-line); background: var(--umap-accent-soft); color: var(--umap-accent-ink); font-size: .82rem; font-weight: 650; white-space: nowrap;}
+    .umap-arrow {opacity: .5; font-size: .9rem;}
+
+    /* ---------- Guide: numbered step cards ---------- */
+    .umap-stepcard {display: flex; gap: 1rem; align-items: flex-start; max-width: 900px; margin: .6rem 0; padding: .95rem 1.15rem; border: 1px solid var(--umap-line); border-left: 4px solid var(--umap-accent); border-radius: var(--umap-radius); background: var(--umap-surface);}
+    .umap-stepnum {flex: 0 0 auto; display: flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; margin-top: .1rem; border-radius: 50%; background: var(--umap-accent); color: #fff; font-weight: 700; font-size: 1rem;}
+    .umap-steptitle {font-size: 1.08rem; font-weight: 700; margin-bottom: .25rem;}
+    .umap-stepcard p {margin: .3rem 0; max-width: 72ch; font-size: .96rem;}
+
+    /* ---------- Guide: glossary cards ---------- */
+    .umap-term {height: 100%; margin-bottom: .6rem; padding: .7rem .85rem; border: 1px solid var(--umap-line); border-radius: .7rem; background: var(--umap-surface);}
+    .umap-term-name {font-weight: 700; font-size: .95rem; color: var(--umap-accent-ink);}
+    .umap-term p {margin: .15rem 0 0 0; font-size: .92rem; line-height: 1.55;}
+
+    /* ---------- Sidebar navigation ---------- */
     [data-testid="stSidebar"] [data-testid="stRadio"] > label {font-weight: 650;}
-    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] {gap: .35rem;}
-    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radio"] {padding: .55rem .65rem; border-radius: .65rem;}
-    [data-testid="stVerticalBlockBorderWrapper"] {border-radius: .85rem;}
-    [data-testid="stMetric"] {border: 1px solid rgba(128,128,128,.16); min-height: 105px;}
-    [data-testid="stMetricLabel"] {font-weight: 650;}
-    div[data-testid="stButton"] > button, div[data-testid="stDownloadButton"] > button {min-height: 2.65rem; transition: border-color .15s ease, transform .15s ease;}
-    div[data-testid="stButton"] > button:hover, div[data-testid="stDownloadButton"] > button:hover {border-color: var(--primary-color, #0f766e); transform: translateY(-1px);}
-    div[data-testid="stFileUploader"] section {border-radius: .75rem;}
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] {gap: .4rem;}
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radio"] {display: flex; align-items: center; gap: .4rem; padding: .55rem .7rem; border: 1px solid var(--umap-line); border-radius: .7rem; background: transparent; transition: border-color .15s ease, background .15s ease;}
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radio"]:hover {border-color: var(--umap-accent);}
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radio"][aria-checked="true"] {border-color: var(--umap-accent); background: var(--umap-accent-soft); font-weight: 650;}
+    .umap-sidebar-note {margin-top: .6rem; padding: .6rem .8rem; border: 1px dashed var(--umap-line); border-radius: .7rem; font-size: .84rem; line-height: 1.5; opacity: .9;}
+
+    /* ---------- Controls ---------- */
+    div[data-testid="stButton"] > button, div[data-testid="stDownloadButton"] > button {min-height: 2.65rem; border-radius: .6rem; transition: border-color .15s ease, transform .15s ease;}
+    div[data-testid="stButton"] > button[kind="primary"] {font-weight: 650;}
+    div[data-testid="stButton"] > button:hover, div[data-testid="stDownloadButton"] > button:hover {transform: translateY(-1px);}
+    div[data-testid="stFileUploader"] {border-radius: var(--umap-radius);}
+    div[data-testid="stFileUploader"] section {border-radius: var(--umap-radius);}
     div[data-testid="stTextArea"] textarea, div[data-testid="stTextInput"] input {border-radius: .55rem;}
-    div[data-testid="stAlert"] {border-radius: .75rem;}
-    .umap-step-label {font-size: .8rem; font-weight: 750; letter-spacing: .04em; text-transform: uppercase; opacity: .72;}
+    div[data-testid="stExpander"] {border-color: var(--umap-line); border-radius: var(--umap-radius);}
+    div[data-testid="stExpander"] summary {font-weight: 650;}
+    div[data-testid="stAlert"] {border-radius: var(--umap-radius);}
+    div[data-testid="stDataFrame"] {border: 1px solid rgba(128,128,128,.18); border-radius: .7rem; overflow: hidden;}
+
+    /* ---------- Metrics ---------- */
+    [data-testid="stMetric"] {min-height: 100px; padding: .8rem 1rem; border: 1px solid rgba(128,128,128,.16); border-radius: var(--umap-radius); background: rgba(128,128,128,.06);}
+    [data-testid="stMetricLabel"] {font-weight: 650;}
+
+    /* ---------- Section labels ---------- */
+    .umap-step-label {font-size: .78rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; color: var(--umap-accent-ink); margin-bottom: -.1rem;}
     .umap-step-title {font-size: 1.12rem; font-weight: 750; margin: .15rem 0 .4rem 0;}
-    @media (max-width: 700px) { .block-container {padding-top: 1rem; padding-bottom: 2rem;} .umap-subtitle {font-size: .96rem;} }
+
+    @media (max-width: 700px) {
+      .block-container {padding-top: 1rem; padding-bottom: 2rem;}
+      .umap-subtitle {font-size: .96rem;}
+      .umap-stepcard {flex-direction: column; gap: .5rem;}
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -44,6 +99,22 @@ st.markdown(
 st.markdown('<p class="umap-eyebrow">Community mapping workflow · ChatMap → review → uMap</p>', unsafe_allow_html=True)
 st.title("🗺️ uMap Styler")
 st.markdown('<p class="umap-subtitle">Prepare community mapping data, review corrections, and export only records approved for publication.</p>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="umap-flow">'
+    '<span class="umap-chip">1 · Load reports</span><span class="umap-arrow">→</span>'
+    '<span class="umap-chip">2 · Check &amp; correct</span><span class="umap-arrow">→</span>'
+    '<span class="umap-chip">3 · Approve</span><span class="umap-arrow">→</span>'
+    '<span class="umap-chip">4 · Export for uMap</span>'
+    '</div>',
+    unsafe_allow_html=True,
+)
+
+WORKSPACE_ICONS = {
+    "Beginner guide": "🧭",
+    "Review ChatMap reports": "📋",
+    "Prepare map for uMap": "🗺️",
+    "Advanced tools": "🛠️",
+}
 
 with st.sidebar:
     st.markdown("## Your workflow")
@@ -52,13 +123,46 @@ with st.sidebar:
         "Choose a workflow",
         options=["Beginner guide", "Review ChatMap reports", "Prepare map for uMap", "Advanced tools"],
         index=0,
+        format_func=lambda name: f"{WORKSPACE_ICONS.get(name, '')} {name}".strip(),
         help="New here? Start with Beginner guide. It explains each step and which file to use.",
         label_visibility="collapsed",
     )
+    sidebar_records = st.session_state.get("chatmap_review_records") or {}
+    if sidebar_records:
+        sidebar_approved = sum(1 for rec in sidebar_records.values() if rec.get("status") == "Verified")
+        st.markdown(
+            f'<p class="umap-sidebar-note"><strong>This session:</strong> {len(sidebar_records)} report(s) loaded · '
+            f'{sidebar_approved} approved for the map.</p>',
+            unsafe_allow_html=True,
+        )
     st.divider()
     st.caption("**Publishing rule**")
     st.caption("Only verified, conflict-free records are included in the ChatMap export.")
     st.caption("Publishing to uMap remains a manual step; nothing is auto-published.")
+
+
+def render_guide_step(step_number, title, paragraphs):
+    """Render one numbered guide step as a styled card (author-controlled rich text)."""
+    body = "".join(f"<p>{paragraph}</p>" for paragraph in paragraphs)
+    st.markdown(
+        '<div class="umap-stepcard">'
+        f'<div class="umap-stepnum">{step_number}</div>'
+        f'<div><div class="umap-steptitle">{title}</div>{body}</div>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_term_cards(items):
+    """Render glossary terms as a two-column grid of small cards."""
+    term_columns = st.columns(2)
+    for index, (term, meaning) in enumerate(items):
+        with term_columns[index % 2]:
+            st.markdown(
+                f'<div class="umap-term"><span class="umap-term-name">{term}</span>'
+                f'<p>{meaning}</p></div>',
+                unsafe_allow_html=True,
+            )
 
 
 # --------------------------
@@ -1073,7 +1177,6 @@ def _parse_chatmap_geojson(upload):
     return data
 
 if active_workspace == "Beginner guide":
-    st.markdown("---")
     st.header("Welcome — Start here")
     st.write("Use this tool to check reports from ChatMap before adding them to your community map. Follow the steps in order. You do not need to understand technical terms.")
     st.subheader("Before you begin")
@@ -1083,33 +1186,33 @@ if active_workspace == "Beginner guide":
     - Make sure you can open and edit the uMap map where these reports belong.
     """)
     st.subheader("Follow these steps")
-    with st.container(border=True):
-        st.markdown("### 1. Load your reports")
-        st.write("Choose **Review ChatMap reports** in the menu on the left. If this is your first time, upload the latest file you downloaded from ChatMap and click **Load and check reports**.")
-        st.write("If you are returning, first upload your **saved review progress** file, then load the newest report file from ChatMap.")
-    with st.container(border=True):
-        st.markdown("### 2. Check and correct each report")
-        st.write("Choose a report from the list. Read the original information, then update the details in the text box if needed. The box contains formatted text, so keep the punctuation in place. If you are unsure how to change it, leave it unchanged and write a note for the next person. Choose the review result and click **Save this report**.")
-        st.write("Do not guess. If you are unsure, add a note and do not approve the report. If a warning says the report has changed, check the new information before approving it.")
-    with st.container(border=True):
-        st.markdown("### 3. Prepare the map file")
-        st.write("Open **Prepare your map**. This page shows how many reports are approved and ready. Download **approved reports for uMap**. Only approved reports without unresolved warnings are included.")
-    with st.container(border=True):
-        st.markdown("### 4. Add the file to uMap")
-        st.write("Open your uMap map and enter edit mode. Choose **Import data**, select the approved reports file you downloaded, check that the points or areas and details look right, then save the map.")
-    with st.container(border=True):
-        st.markdown("### 5. Save your progress for next time")
-        st.write("On **Prepare your map**, download **saved review progress** and keep it somewhere safe. Next time, upload it in **Review ChatMap reports** before loading the newest ChatMap file.")
+    render_guide_step(1, "Load your reports", [
+        "Choose <strong>Review ChatMap reports</strong> in the menu on the left. If this is your first time, upload the latest file you downloaded from ChatMap and click <strong>Load and check reports</strong>.",
+        "If you are returning, first upload your <strong>saved review progress</strong> file, then load the newest report file from ChatMap.",
+    ])
+    render_guide_step(2, "Check and correct each report", [
+        "Choose a report from the list. Read the original information, then update the details in the text box if needed. The box contains formatted text, so keep the punctuation in place. If you are unsure how to change it, leave it unchanged and write a note for the next person. Choose the review result and click <strong>Save this report</strong>.",
+        "Do not guess. If you are unsure, add a note and do not approve the report. If a warning says the report has changed, check the new information before approving it.",
+    ])
+    render_guide_step(3, "Prepare the map file", [
+        "Open <strong>Prepare your map</strong>. This page shows how many reports are approved and ready. Download <strong>approved reports for uMap</strong>. Only approved reports without unresolved warnings are included.",
+    ])
+    render_guide_step(4, "Add the file to uMap", [
+        "Open your uMap map and enter edit mode. Choose <strong>Import data</strong>, select the approved reports file you downloaded, check that the points or areas and details look right, then save the map.",
+    ])
+    render_guide_step(5, "Save your progress for next time", [
+        "On <strong>Prepare your map</strong>, download <strong>saved review progress</strong> and keep it somewhere safe. Next time, upload it in <strong>Review ChatMap reports</strong> before loading the newest ChatMap file.",
+    ])
     st.warning("This tool does not update uMap by itself. You choose what to approve, import the approved file, check the result, and save the map.")
     st.subheader("What do these words mean?")
-    st.markdown("""
-    - **Original information:** what came from ChatMap; it is kept so you can compare it with your edits.
-    - **Your edited copy:** the version you can correct.
-    - **Needs checking:** this report is not ready for the map yet.
-    - **Changed since your last check:** a newer ChatMap file has different information; check it again.
-    - **Verified:** you checked the report and approve it for the map.
-    - **Saved review progress:** a backup of your corrections and decisions. It is not the map file.
-    """)
+    render_term_cards([
+        ("Original information", "what came from ChatMap; it is kept so you can compare it with your edits."),
+        ("Your edited copy", "the version you can correct."),
+        ("Needs checking", "this report is not ready for the map yet."),
+        ("Changed since your last check", "a newer ChatMap file has different information; check it again."),
+        ("Verified", "you checked the report and approve it for the map."),
+        ("Saved review progress", "a backup of your corrections and decisions. It is not the map file."),
+    ])
 
 if active_workspace in ("Review ChatMap reports", "Prepare map for uMap"):
     st.markdown("---")

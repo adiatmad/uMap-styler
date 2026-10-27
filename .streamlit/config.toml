@@ -1,0 +1,10 @@
+# Visual theme for the uMap Styler app.
+# Light base with a teal accent that matches the CSS in app.py.
+
+[theme]
+base = "light"
+primaryColor = "#0f766e"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f5f4f1"
+textColor = "#1f2933"
+font = "sans serif"
