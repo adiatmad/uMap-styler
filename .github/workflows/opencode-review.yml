@@ -1,0 +1,41 @@
+name: OpenCodeReview PR Review
+
+on:
+  # The official action reads the PR diff and does not execute PR code.
+  # Keep this workflow free of checkout/run steps when using pull_request_target.
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: opencode-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Review pull request
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Run OpenCodeReview
+        # Pinned to the v1.13.3 release commit; update deliberately after review.
+        uses: alibaba/open-code-review@375f64cd6f67a48a135da83cfcf59c52669a09cb
+        with:
+          # Pin the CLI too: pinning only the Action does not freeze its runtime.
+          ocr_version: '1.13.3'
+          llm_url: ${{ secrets.OCR_LLM_URL }}
+          llm_auth_token: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
+          llm_model: ${{ vars.OCR_LLM_MODEL }}
+          llm_protocol: openai
+          llm_use_anthropic: 'false'
+          language: English
+          effort: low
+          max_tokens_budget: '100000'
+          sticky_summary: 'true'
+          incremental: 'true'
+          # Avoid persisting raw review JSON and stderr as workflow artifacts by default.
+          upload_artifacts: 'false'
+          stream_progress: 'true'
